@@ -1,14 +1,15 @@
 import * as Sharing from 'expo-sharing';
 import { useRef, useState, type ComponentRef } from 'react';
-import { Modal, Text, View } from 'react-native';
+import { Modal, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { FORM_LABEL, STAGE_LABEL } from '@/lib/petText';
 import type { Pet } from '@/lib/types';
 import { PetArt } from './PetView';
-import { Button, colors } from './ui';
+import { Button, Text, useColors } from './ui';
 
 // A square card of the pet and this week's steps, shared as an image.
 export function ShareCard({ pet, weekSteps, streak, visible, onClose }: { pet: Pet; weekSteps: number; streak: number; visible: boolean; onClose: () => void }) {
+  const colors = useColors();
   const ref = useRef<ComponentRef<typeof View>>(null);
   const [busy, setBusy] = useState(false);
 
@@ -26,7 +27,7 @@ export function ShareCard({ pet, weekSteps, streak, visible, onClose }: { pet: P
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 24, gap: 12 }}>
-        <View ref={ref} collapsable={false} style={{ backgroundColor: '#FFF3E2', borderRadius: 24, padding: 20, alignItems: 'center', gap: 4 }}>
+        <View ref={ref} collapsable={false} style={{ backgroundColor: colors.bg, borderRadius: 24, borderWidth: 2, borderColor: colors.line, padding: 20, alignItems: 'center', gap: 4 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent, letterSpacing: 1 }}>STEP PET</Text>
           <PetArt look={pet} size={230} />
           <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>{pet.name}</Text>
@@ -44,6 +45,7 @@ export function ShareCard({ pet, weekSteps, streak, visible, onClose }: { pet: P
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
+  const colors = useColors();
   return (
     <View style={{ alignItems: 'center' }}>
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{value}</Text>

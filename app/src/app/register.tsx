@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Button, ErrorText, Field, Muted, Screen } from '@/components/ui';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { EggHeader, MeadowBackdrop } from '@/components/Doodles';
+import { Button, ErrorText, Field, Muted, Screen, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import type { User } from '@/lib/types';
 
 export default function Register() {
+  const colors = useColors();
   const { signIn } = useSession();
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
@@ -30,17 +32,21 @@ export default function Register() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <Screen>
-          <Field label="Nickname (shown on leaderboards)" value={nickname} onChangeText={setNickname} maxLength={24} autoCapitalize="words" />
-          <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
-          <Field label="Password (8+ characters)" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" />
-          <ErrorText message={error} />
-          <Button label="Create account" onPress={submit} busy={busy} disabled={!nickname || !email || password.length < 8} />
-          <Muted>We only ever read your step count. No location, no heart rate.</Muted>
-        </Screen>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <MeadowBackdrop height={110} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+          <Screen style={{ backgroundColor: 'transparent' }}>
+            <EggHeader />
+            <Field label="Nickname (shown on leaderboards)" value={nickname} onChangeText={setNickname} maxLength={24} autoCapitalize="words" />
+            <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
+            <Field label="Password (8+ characters)" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" />
+            <ErrorText message={error} />
+            <Button label="Create account" onPress={submit} busy={busy} disabled={!nickname || !email || password.length < 8} />
+            <Muted>We only ever read your step count. No location, no heart rate.</Muted>
+          </Screen>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }

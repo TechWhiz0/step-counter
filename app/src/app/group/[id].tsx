@@ -1,8 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, Share, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, Share, View } from 'react-native';
 import { PetArt } from '@/components/PetView';
-import { Button, colors, ErrorText, Muted } from '@/components/ui';
+import { Button, ErrorText, Muted, Text, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Group, LeaderboardRow } from '@/lib/types';
 
@@ -16,6 +16,7 @@ interface Board {
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 export default function GroupScreen() {
+  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(false);

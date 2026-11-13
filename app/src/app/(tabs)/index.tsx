@@ -1,10 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Modal, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Animated, AppState, Modal, RefreshControl, ScrollView, View } from 'react-native';
 import { PetArt, PetView } from '@/components/PetView';
 import { ShareCard } from '@/components/ShareCard';
 import { StepRing } from '@/components/StepRing';
-import { Button, Card, colors, ErrorText, Muted } from '@/components/ui';
+import { Button, Card, ErrorText, Muted, Text, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { itemLabel } from '@/lib/items';
 import { FORM_LABEL, growthMessage, moodLine, STAGE_LABEL } from '@/lib/petText';
@@ -12,6 +12,7 @@ import { cachedSync, syncSteps, takePendingSurprises } from '@/lib/sync';
 import type { Pet, Surprise, SyncResult } from '@/lib/types';
 
 export default function Home() {
+  const colors = useColors();
   const [data, setData] = useState<SyncResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +116,7 @@ export default function Home() {
 }
 
 function GrowthCard({ pet }: { pet: Pet }) {
+  const colors = useColors();
   if (!pet.nextStage) {
     return (
       <Card>
@@ -127,20 +129,34 @@ function GrowthCard({ pet }: { pet: Pet }) {
   return (
     <Card>
       <Text style={{ fontWeight: '800', fontSize: 16, color: colors.ink }}>Growing to {next}</Text>
-      <View style={{ height: 12, backgroundColor: colors.accentSoft, borderRadius: 6, overflow: 'hidden' }}>
-        <View style={{ width: `${Math.round(pet.stageProgress * 100)}%`, height: '100%', backgroundColor: colors.accent }} />
-      </View>
+      <GrowthBar progress={pet.stageProgress} />
       <Muted>{pet.stepsToNextStage.toLocaleString()} more steps</Muted>
       {pet.nextStage === 'adult' && <Muted>When you walk most in the next weeks decides {pet.name}'s adult form.</Muted>}
     </Card>
   );
 }
 
+// Fills from empty to the pet's progress, with a little overshoot, whenever it changes.
+function GrowthBar({ progress }: { progress: number }) {
+  const colors = useColors();
+  const fill = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(fill, { toValue: progress, useNativeDriver: false, speed: 6, bounciness: 6 }).start();
+  }, [fill, progress]);
+  const width = fill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'], extrapolate: 'clamp' });
+  return (
+    <View style={{ height: 14, backgroundColor: colors.accentSoft, borderRadius: 99, overflow: 'hidden' }}>
+      <Animated.View style={{ width, height: '100%', borderRadius: 99, backgroundColor: colors.accent }} />
+    </View>
+  );
+}
+
 function SurpriseModal({ petName, surprises, onDone }: { petName: string; surprises: Surprise[]; onDone: () => void }) {
+  const colors = useColors();
   return (
     <Modal visible={surprises.length > 0} transparent animationType="slide" onRequestClose={onDone}>
       <View style={{ flex: 1, backgroundColor: '#0006', justifyContent: 'flex-end' }}>
-        <View style={{ backgroundColor: colors.card, padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 12 }}>
+        <View style={{ backgroundColor: colors.card, padding: 24, borderTopLeftRadius: 28, borderTopRightRadius: 28, gap: 12 }}>
           <Text style={{ fontSize: 40, textAlign: 'center' }}>✨</Text>
           <Text style={{ fontSize: 22, fontWeight: '900', color: colors.ink, textAlign: 'center' }}>{petName} found something!</Text>
           {surprises.map((s) => (
@@ -157,6 +173,7 @@ function SurpriseModal({ petName, surprises, onDone }: { petName: string; surpri
 }
 
 function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDone: () => void }) {
+  const colors = useColors();
   const scale = useRef(new Animated.Value(0.2)).current;
   useEffect(() => {
     if (!visible) return;
@@ -166,7 +183,7 @@ function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDon
   const msg = growthMessage(pet);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDone}>
-      <View style={{ flex: 1, backgroundColor: '#2B2233EE', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+      <View style={{ flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
         <Animated.View style={{ transform: [{ scale }] }}>
           <PetArt look={pet} size={260} />
         </Animated.View>

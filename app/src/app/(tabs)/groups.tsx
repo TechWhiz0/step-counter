@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Button, Card, colors, ErrorText, Field, Muted } from '@/components/ui';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Button, Card, ErrorText, Field, Muted, Text, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Group } from '@/lib/types';
 
 export default function Groups() {
+  const colors = useColors();
   const [groups, setGroups] = useState<Group[]>([]);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');

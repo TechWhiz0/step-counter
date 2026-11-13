@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Animated, Easing, Pressable } from 'react-native';
+import { bumpFeedback } from '@/lib/haptics';
 import Svg, { Circle, Defs, Ellipse, G, Line, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Form, Mood, Stage, Traits } from '@/lib/types';
 
@@ -353,11 +354,33 @@ export function PetView({ look, size = 220 }: { look: PetLook; size?: number }) 
         ? { transform: [{ scaleY: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }] }
         : { transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }] };
 
+  // Tap: squash down, hop up, land with a jelly wobble. 0 = rest, 1 = squashed, 2 = top of the hop.
+  const hop = useRef(new Animated.Value(0)).current;
+  const onTap = () => {
+    bumpFeedback();
+    hop.stopAnimation();
+    Animated.sequence([
+      Animated.timing(hop, { toValue: 1, duration: 110, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(hop, { toValue: 2, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 16 }),
+    ]).start();
+  };
+  const range = { inputRange: [-1, 0, 1, 2], extrapolate: 'clamp' as const };
+  const hopStyle = {
+    transform: [
+      { translateY: hop.interpolate({ ...range, outputRange: [4, 0, size * 0.03, -size * 0.18] }) },
+      { scaleX: hop.interpolate({ ...range, outputRange: [1.06, 1, 1.12, 0.94] }) },
+      { scaleY: hop.interpolate({ ...range, outputRange: [0.94, 1, 0.86, 1.06] }) },
+    ],
+  };
+
   return (
-    <View style={{ width: size, height: size }}>
-      <Animated.View style={style}>
-        <PetArt look={look} size={size} />
+    <Pressable onPress={onTap} accessibilityRole="imagebutton" accessibilityLabel="Your pet" style={{ width: size, height: size }}>
+      <Animated.View style={hopStyle}>
+        <Animated.View style={style}>
+          <PetArt look={look} size={size} />
+        </Animated.View>
       </Animated.View>
-    </View>
+    </Pressable>
   );
 }

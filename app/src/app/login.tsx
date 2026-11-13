@@ -1,11 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Button, ErrorText, Field, Screen } from '@/components/ui';
+import { View } from 'react-native';
+import { EggHeader, MeadowBackdrop } from '@/components/Doodles';
+import { Button, ErrorText, Field, Screen, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import type { Pet, User } from '@/lib/types';
 
 export default function Login() {
+  const colors = useColors();
   const { signIn } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,11 +31,15 @@ export default function Login() {
   }
 
   return (
-    <Screen>
-      <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" />
-      <ErrorText message={error} />
-      <Button label="Log in" onPress={submit} busy={busy} disabled={!email || !password} />
-    </Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <MeadowBackdrop height={110} />
+      <Screen style={{ backgroundColor: 'transparent' }}>
+        <EggHeader />
+        <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
+        <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" />
+        <ErrorText message={error} />
+        <Button label="Log in" onPress={submit} busy={busy} disabled={!email || !password} />
+      </Screen>
+    </View>
   );
 }

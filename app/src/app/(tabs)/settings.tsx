@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Alert, ScrollView, Text } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { ServerSetting } from '@/components/ServerSetting';
-import { Button, Card, colors, ErrorText, Field, Muted } from '@/components/ui';
+import { Button, Card, ErrorText, Field, Muted, Text, ThemePicker, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { openHealthSettings } from '@/lib/health';
 import { useSession } from '@/lib/session';
 import type { User } from '@/lib/types';
 
 export default function Settings() {
+  const colors = useColors();
   const { user, setUser, signOut } = useSession();
   const [nickname, setNickname] = useState(user?.nickname ?? '');
   const [goal, setGoal] = useState(String(user?.dailyGoal ?? 6000));
@@ -51,6 +52,11 @@ export default function Settings() {
   const goalNum = Number(goal);
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <Card style={{ gap: 12 }}>
+        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.ink }}>Appearance</Text>
+        <ThemePicker />
+      </Card>
+
       <Card style={{ gap: 12 }}>
         <Field label="Nickname" value={nickname} onChangeText={setNickname} maxLength={24} />
         <Field label="Daily step goal" value={goal} onChangeText={(t) => setGoal(t.replace(/\D/g, ''))} keyboardType="number-pad" maxLength={5} />

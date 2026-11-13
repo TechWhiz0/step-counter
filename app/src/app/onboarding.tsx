@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PetView } from '@/components/PetView';
-import { Button, colors, ErrorText, Field, Muted, Title } from '@/components/ui';
+import { Button, ErrorText, Field, Muted, Text, Title, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { healthStatus, requestStepAccess, type HealthStatus } from '@/lib/health';
 import { setupNotifications } from '@/lib/notifications';
@@ -15,6 +15,7 @@ const GOALS = [4000, 6000, 8000, 10000];
 const HEALTH_CONNECT_STORE = 'market://details?id=com.google.android.apps.healthdata';
 
 export default function Onboarding() {
+  const colors = useColors();
   const { setUser } = useSession();
   const [step, setStep] = useState(0);
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -113,7 +114,7 @@ export default function Onboarding() {
                     backgroundColor: g === goal ? colors.accent : colors.accentSoft,
                   }}
                 >
-                  <Text style={{ color: g === goal ? '#fff' : colors.ink, fontWeight: '700' }}>{g.toLocaleString()}</Text>
+                  <Text style={{ color: g === goal ? colors.onAccent : colors.ink, fontWeight: '700' }}>{g.toLocaleString()}</Text>
                 </Pressable>
               ))}
             </View>

@@ -1,13 +1,14 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { PetView } from '@/components/PetView';
-import { Button, colors, ErrorText, Muted, Screen } from '@/components/ui';
+import { Button, ErrorText, Muted, Screen, Text, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { FORM_LABEL, moodLine, STAGE_LABEL } from '@/lib/petText';
 import type { Pet } from '@/lib/types';
 
 export default function FriendScreen() {
+  const colors = useColors();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const [data, setData] = useState<{ nickname: string; streak: number; pet: Pet | null } | null>(null);
   const [busy, setBusy] = useState(false);

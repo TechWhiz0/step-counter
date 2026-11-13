@@ -1,8 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { PetArt } from '@/components/PetView';
-import { Button, Card, colors, ErrorText, Muted } from '@/components/ui';
+import { Button, Card, ErrorText, Muted, Text, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { itemLabel } from '@/lib/items';
 import { FORM_LABEL, STAGE_LABEL } from '@/lib/petText';
@@ -11,6 +11,7 @@ import type { OwnedItem, Pet } from '@/lib/types';
 const MAX_EQUIPPED = 3;
 
 export default function Collection() {
+  const colors = useColors();
   const [pets, setPets] = useState<Pet[]>([]);
   const [items, setItems] = useState<OwnedItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +87,7 @@ export default function Collection() {
                     borderColor: on ? colors.accent : colors.border,
                   }}
                 >
-                  <Text style={{ color: on ? '#fff' : colors.ink, fontWeight: '700' }}>
+                  <Text style={{ color: on ? colors.onAccent : colors.ink, fontWeight: '700' }}>
                     {itemLabel(i.item)}
                     {i.count > 1 ? ` ×${i.count}` : ''}
                   </Text>
