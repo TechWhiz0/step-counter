@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { PetView } from '@/components/PetView';
-import { Button, ErrorText, Field, Muted, radius, Screen, useColors } from '@/components/ui';
+import { EggArt, EggTile, GuideBubble, type EggKind } from '@/components/AuthArt';
+import { Button, ErrorText, Field, Screen, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import type { Palette } from '@/lib/theme';
@@ -12,6 +12,7 @@ export default function NewEgg() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState('');
+  const [egg, setEgg] = useState<EggKind>('confetti');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,18 +33,28 @@ export default function NewEgg() {
 
   return (
     <Screen>
-      <View style={styles.egg}>
-        <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: 0 }} size={160} onPet={() => {}} />
+      <GuideBubble text="Your grown-up monster moves to your collection. Pick a new egg! It hatches after 5,000 steps." />
+      <View accessibilityRole="radiogroup" accessibilityLabel="Choose an egg" style={styles.row}>
+        {(['confetti', 'meadow', 'starry'] as const).map((k) => (
+          <View key={k} style={{ flex: 1 }}>
+            <EggTile kind={k} label={k[0].toUpperCase() + k.slice(1)} on={egg === k} onPress={() => setEgg(k)} />
+          </View>
+        ))}
       </View>
-      <Muted>Your grown-up pet moves to the collection. The new egg hatches after 5,000 steps, and it will look completely different.</Muted>
-      <Field label="Name the new egg" value={name} onChangeText={setName} maxLength={20} autoFocus />
+      <View style={styles.nameRow}>
+        <EggArt kind={egg} size={72} />
+        <View style={{ flex: 1 }}>
+          <Field label="Name the new egg" value={name} onChangeText={setName} maxLength={20} />
+        </View>
+      </View>
       <ErrorText message={error} />
-      <Button label="Start new egg" onPress={create} busy={busy} disabled={!name.trim()} />
+      <Button label="Hatch this one" onPress={create} busy={busy} disabled={!name.trim()} />
     </Screen>
   );
 }
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
-  egg: { alignItems: 'center', backgroundColor: colors.accentSoft, borderRadius: radius.xl, paddingVertical: 12 },
+  row: { flexDirection: 'row', gap: 8 },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, backgroundColor: colors.bg },
 });

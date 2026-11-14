@@ -32,3 +32,17 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 export function me(req: Request): UserDoc {
   return req.user!;
 }
+
+// Use after requireAuth.
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  next();
+}
+
+// Promotes accounts listed in ADMIN_EMAILS. Called at sign-up and login.
+export async function applyAdminEmail(user: UserDoc) {
+  if (user.role !== 'admin' && config.adminEmails.includes(user.email)) {
+    user.role = 'admin';
+    await user.save();
+  }
+}

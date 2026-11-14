@@ -35,10 +35,10 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { colors, scheme } = useTheme();
+  const { colors } = useTheme();
   return (
     <>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
@@ -51,13 +51,17 @@ function RootStack() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="welcome" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="register" options={{ title: 'Create account' }} />
-        <Stack.Screen name="login" options={{ title: 'Welcome back' }} />
+        <Stack.Screen name="register" options={{ title: '' }} />
+        <Stack.Screen name="login" options={{ title: '' }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="group/[id]" options={{ title: 'Leaderboard' }} />
         <Stack.Screen name="friend/[userId]" options={{ headerTransparent: true, title: '' }} />
         <Stack.Screen name="new-egg" options={{ title: 'New egg', presentation: 'modal' }} />
+        <Stack.Screen name="groups" options={{ title: 'Groups' }} />
+        <Stack.Screen name="unlocks" options={{ headerShown: false }} />
+        <Stack.Screen name="stats" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
       </Stack>
     </>
   );

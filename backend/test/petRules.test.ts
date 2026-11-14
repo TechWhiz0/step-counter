@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addDays, weekStart } from '../src/lib/dates.js';
-import { cappedTotal, formFor, goldenTargets, stageFor, stageProgress, traitsFor } from '../src/lib/petRules.js';
+import { cappedTotal, energyFor, formFor, goldenTargets, stageFor, stageProgress, traitsFor } from '../src/lib/petRules.js';
 
 const hours = (map: Record<number, number>) => Array.from({ length: 24 }, (_, h) => map[h] ?? 0);
 
@@ -55,4 +55,23 @@ test('golden targets are distinct and in range', () => {
 test('date helpers', () => {
   assert.equal(addDays('2026-10-31', 1), '2026-11-01');
   assert.equal(weekStart('2026-10-31'), '2026-10-26');
+});
+
+test('energy stays high for steady walkers and drains when days are skipped', () => {
+  const goal = 8000;
+  const full = Array(7).fill(9000);
+  assert.ok(energyFor({ recent: full, goal, today: 0 }) >= 80, 'steady week keeps energy high');
+  assert.equal(energyFor({ recent: full, goal, today: 8000 }), 100);
+  // A brand-new pet with no history starts out fine, not weak.
+  const fresh = energyFor({ recent: [], goal, today: 0 });
+  assert.ok(fresh >= 45 && fresh < 80);
+  // Skipping the last few days drains energy more with every extra day.
+  const skip3 = energyFor({ recent: [9000, 9000, 9000, 9000, 0, 0, 0], goal, today: 0 });
+  const skip5 = energyFor({ recent: [9000, 9000, 0, 0, 0, 0, 0], goal, today: 0 });
+  assert.ok(skip3 < 45, `3 skipped days leave the pet tired (${skip3})`);
+  assert.ok(skip5 < 20, `5 skipped days leave the pet weak (${skip5})`);
+  assert.ok(skip5 >= 5);
+  // One good day lifts a weak pet out of "weak"; a few days in a row bring it all the way back.
+  assert.ok(energyFor({ recent: [9000, 9000, 0, 0, 0, 0, 0], goal, today: 8000 }) >= 20);
+  assert.ok(energyFor({ recent: [0, 0, 0, 0, 9000, 9000, 9000], goal, today: 8000 }) >= 70);
 });

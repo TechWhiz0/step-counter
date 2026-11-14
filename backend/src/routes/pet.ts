@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { me, requireAuth } from '../lib/auth.js';
+import { rules } from '../config.js';
 import { activePet, newEgg, refreshPet, serializePet, todayFor } from '../lib/game.js';
+import { GOLDEN_ITEMS } from '../lib/petRules.js';
 import { Item, Pet } from '../models/index.js';
 
 export const petRouter = Router();
@@ -58,6 +60,27 @@ petRouter.get('/items', async (req, res) => {
     { $sort: { _id: 1 } },
   ]);
   res.json({ items: items.map((i) => ({ item: i._id, count: i.count, source: i.source })) });
+});
+
+// Every closet item, how it is earned, and how many the user owns. Nothing is bought.
+petRouter.get('/closet', async (req, res) => {
+  const user = me(req);
+  const counts = await Item.aggregate<{ _id: string; count: number }>([
+    { $match: { userId: user._id } },
+    { $group: { _id: '$item', count: { $sum: 1 } } },
+  ]);
+  const owned = new Map(counts.map((c) => [c._id, c.count]));
+  const entry = (item: string, rule: { kind: 'golden' } | { kind: 'streak'; days: number } | { kind: 'steps'; steps: number }) => ({
+    item,
+    rule,
+    count: owned.get(item) ?? 0,
+  });
+  const items = [
+    ...rules.milestoneItems.map((m) => entry(m.item, { kind: 'steps', steps: m.steps })),
+    ...Object.entries(rules.streakRewards).map(([days, item]) => entry(item, { kind: 'streak', days: Number(days) })),
+    ...GOLDEN_ITEMS.filter((i) => !rules.milestoneItems.some((m) => m.item === i)).map((i) => entry(i, { kind: 'golden' })),
+  ];
+  res.json({ lifetimeSteps: user.lifetimeSteps, bestStreak: user.bestStreak, items });
 });
 
 petRouter.post('/equip', async (req, res) => {

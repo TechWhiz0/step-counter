@@ -10,7 +10,8 @@
     "test": "tsx --test test/*.test.ts",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx scripts/seed.ts"
   },
   "keywords": [],
   "author": "",

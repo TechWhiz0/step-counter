@@ -24,6 +24,18 @@ const looks: (PetLook & { label: string })[] = [
     traits: traits as Traits,
     equipped: [...equipped],
   })),
+  // Monster faces: every mood, plus asleep (night) and weak (low energy); Pip has the one-eyed face.
+  ...(['happy', 'neutral', 'sleepy', 'asleep', 'weak'] as const).flatMap((mood) =>
+    (['mochi', 'pip'] as const).map((species) => ({
+      label: `${species} · ${mood}`,
+      species,
+      stage: 'adult' as const,
+      form: null,
+      traits: null,
+      mood,
+      equipped: [],
+    })),
+  ),
 ];
 
 export default function PetGallery() {

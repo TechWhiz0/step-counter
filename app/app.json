@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.steppet.app"
@@ -14,7 +14,7 @@
     "android": {
       "package": "com.steppet.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FFF4E6",
+        "backgroundColor": "#3D9BF5",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

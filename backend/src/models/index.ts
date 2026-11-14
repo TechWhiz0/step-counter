@@ -12,6 +12,17 @@ const userSchema = new Schema(
     bestStreak: { type: Number, default: 0 },
     // Last day the nightly job closed for this user ('YYYY-MM-DD').
     lastClosedDay: { type: String, default: null },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    // Capped steps ever walked; drives monster and closet unlocks.
+    lifetimeSteps: { type: Number, default: 0 },
+    // Earned from daily quests.
+    treats: { type: Number, default: 0 },
+    // Index into rules.leagueTiers; moves up or down each Monday.
+    league: { type: Number, default: 0 },
+    // Set by the step-anomaly check; an admin clears it or hides the user from leagues.
+    flagged: { type: Boolean, default: false },
+    flagReason: { type: String, default: null },
+    hiddenFromLeagues: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
@@ -59,6 +70,8 @@ const petSchema = new Schema(
     form: { type: String, enum: ['sunrise', 'daytime', 'moonlight', 'balanced', null], default: null },
     traits: { type: traitsSchema, default: null },
     mood: { type: String, enum: ['happy', 'sleepy', 'neutral'], default: 'neutral' },
+    // 5-100, from the last week of walks (see energyFor). Low energy means the pet needs walks to recover.
+    energy: { type: Number, default: 70 },
     equipped: { type: [String], default: [] },
     treatsReceived: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
@@ -72,7 +85,7 @@ const itemSchema = new Schema(
   {
     userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
     item: { type: String, required: true },
-    source: { type: String, enum: ['golden', 'streak', 'treat'], required: true },
+    source: { type: String, enum: ['golden', 'streak', 'treat', 'milestone'], required: true },
     day: { type: String, required: true },
   },
   { timestamps: true },
@@ -106,6 +119,27 @@ const treatSchema = new Schema(
 );
 treatSchema.index({ fromUser: 1, toPet: 1, day: 1 }, { unique: true });
 
+// Admin overrides for the shipped monster catalog (lib/species.ts).
+const monsterSettingSchema = new Schema(
+  {
+    species: { type: String, required: true, unique: true },
+    unlockSteps: { type: Number, default: null },
+    enabled: { type: Boolean, default: null },
+  },
+  { timestamps: true },
+);
+
+// One row per claimed daily quest, so a reward can't be claimed twice.
+const questClaimSchema = new Schema(
+  {
+    userId: { type: Types.ObjectId, ref: 'User', required: true },
+    day: { type: String, required: true },
+    quest: { type: String, required: true },
+  },
+  { timestamps: true },
+);
+questClaimSchema.index({ userId: 1, day: 1, quest: 1 }, { unique: true });
+
 export const User = model('User', userSchema);
 export const StepDay = model('StepDay', stepDaySchema);
 export const Pet = model('Pet', petSchema);
@@ -113,6 +147,8 @@ export const Item = model('Item', itemSchema);
 export const GoldenDay = model('GoldenDay', goldenDaySchema);
 export const Group = model('Group', groupSchema);
 export const Treat = model('Treat', treatSchema);
+export const MonsterSetting = model('MonsterSetting', monsterSettingSchema);
+export const QuestClaim = model('QuestClaim', questClaimSchema);
 
 export type UserDoc = HydratedDocument<InferSchemaType<typeof userSchema>>;
 export type PetDoc = HydratedDocument<InferSchemaType<typeof petSchema>>;

@@ -145,3 +145,14 @@ test('account delete removes data', async () => {
   assert.equal(await StepDay.countDocuments({ userId: c.id }), 0);
   assert.equal((await request(app).get('/pet').set(auth(c.token))).status, 401);
 });
+
+test('daily goal can change but the nickname is fixed after sign-up', async () => {
+  const { token } = await signUp('fixedname@example.com', 'Fixed');
+  const goal = await request(app).patch('/auth/me').set(auth(token)).send({ dailyGoal: 9000 });
+  assert.equal(goal.status, 200);
+  assert.equal(goal.body.user.dailyGoal, 9000);
+  const rename = await request(app).patch('/auth/me').set(auth(token)).send({ nickname: 'Renamed' });
+  assert.equal(rename.status, 400);
+  const me = await request(app).get('/auth/me').set(auth(token));
+  assert.equal(me.body.user.nickname, 'Fixed');
+});

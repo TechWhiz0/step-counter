@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { config } from '../config.js';
 import { closeDays, todayFor } from '../lib/game.js';
+import { rolloverLeagues } from '../lib/leagues.js';
 import { User } from '../models/index.js';
 
 // Closes yesterday for every user: goal result, streak, mood, growth, streak rewards.
@@ -19,6 +20,9 @@ export async function runDayClose(now = new Date()) {
 }
 
 export function scheduleDayClose() {
+  cron.schedule('20 0 * * 1', () => void rolloverLeagues().catch((e) => console.error('league rollover failed', e)), {
+    timezone: config.timezone,
+  });
   return cron.schedule('5 0 * * *', () => void runDayClose(), { timezone: config.timezone });
 }
 

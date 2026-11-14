@@ -3,7 +3,9 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { ZodError } from 'zod';
 import { authRouter } from './routes/auth.js';
 import { friendsRouter, groupsRouter } from './routes/groups.js';
+import { adminRouter } from './routes/admin.js';
 import { petRouter } from './routes/pet.js';
+import { leaguesRouter, monstersRouter, questsRouter } from './routes/play.js';
 import { stepsRouter } from './routes/steps.js';
 
 export function createApp() {
@@ -17,6 +19,10 @@ export function createApp() {
   app.use('/pet', petRouter);
   app.use('/groups', groupsRouter);
   app.use('/friends', friendsRouter);
+  app.use('/quests', questsRouter);
+  app.use('/leagues', leaguesRouter);
+  app.use('/monsters', monstersRouter);
+  app.use('/admin', adminRouter);
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {

@@ -33,6 +33,19 @@ npm run dev            # http://localhost:4000
 npm test               # needs a MongoDB at TEST_MONGO_URL (default mongodb://127.0.0.1:27018/steppet_test)
 ```
 
+### Admin and demo accounts
+
+```bash
+npm run seed           # creates or resets the admin and demo accounts
+```
+
+`npm run seed` creates two accounts you can log in with. Their emails and passwords are the `SEED_ADMIN_*` and `SEED_DEMO_*` values in `backend/.env`.
+
+- **Admin**: sees the Admin screens under Me.
+- **Demo walker**: about 75 days of walks, an adult Mochi, a league and a group. Good for showing the app.
+
+It also adds a few helper walkers so the league, group and admin review queue aren't empty. Running it again resets only these accounts. Set your own passwords in `.env` before seeding a shared server.
+
 ## Run the app
 
 Health Connect and HealthKit need a development build (not Expo Go).

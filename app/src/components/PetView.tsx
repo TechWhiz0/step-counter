@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { Animated, Easing, Pressable, View } from 'react-native';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
 import { haptic, useReducedMotion } from '@/lib/feel';
 import Svg, { Circle, Defs, Ellipse, G, Line, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
-import type { Form, Mood, Stage, Traits } from '@/lib/types';
+import type { FaceMood, Form, Mood, Stage, Traits } from '@/lib/types';
+import { isMonster, MonsterShape } from './monsters';
 
 export interface PetLook {
+  species?: string;
   stage: Stage;
   form: Form | null;
   traits: Traits | null;
-  mood: Mood;
+  mood: FaceMood;
   equipped: string[];
   stageProgress?: number; // egg cracks
 }
@@ -277,13 +279,32 @@ function Egg({ progress = 0 }: { progress?: number }) {
 
 export function PetArt({ look, size = 220 }: { look: PetLook; size?: number }) {
   const { stage, traits, mood, form, equipped } = look;
-  if (stage === 'egg' || !traits) {
+  // The older blob pets only have three faces.
+  const blobMood: Mood = mood === 'asleep' ? 'sleepy' : mood === 'weak' ? 'neutral' : mood;
+  if (stage === 'egg' || (!traits && !isMonster(look.species))) {
     return (
       <Svg width={size} height={size} viewBox="0 0 200 200">
         <Egg progress={look.stageProgress} />
       </Svg>
     );
   }
+  if (look.species && isMonster(look.species)) {
+    // Monsters are drawn in a 120 box with feet at y=108; scale to the 200 box and grow by stage, anchored at the feet.
+    const k = (200 / 120) * STAGE_SCALE[stage];
+    return (
+      <Svg width={size} height={size} viewBox="0 0 200 200">
+        <G transform={`translate(100 184) scale(${k}) translate(-60 -110)`}>
+          <MonsterShape species={look.species} mood={mood} />
+        </G>
+        <G transform={`translate(100 180) scale(${STAGE_SCALE[stage]}) translate(-100 -180)`}>
+          {equipped.map((item) => (
+            <Accessory key={item} item={item} />
+          ))}
+        </G>
+      </Svg>
+    );
+  }
+  if (!traits) return null;
   const hue = traits.hue;
   const body = hsl(hue, 70, 72);
   const belly = hsl(hue, 80, 88);
@@ -315,14 +336,14 @@ export function PetArt({ look, size = 220 }: { look: PetLook; size?: number }) {
           <Marking key={`${x}-${y}`} pattern={traits.pattern} x={x} y={y} color={mark} />
         ))}
         <Ellipse cx={CX} cy={CY} rx={58} ry={54} fill="url(#shine)" />
-        <Eyes eyes={traits.eyes} mood={mood} />
+        <Eyes eyes={traits.eyes} mood={blobMood} />
         {traits.cheeks && (
           <G>
             <Ellipse cx={68} cy={124} rx={8} ry={5} fill="#FF8FA3" opacity={0.6} />
             <Ellipse cx={132} cy={124} rx={8} ry={5} fill="#FF8FA3" opacity={0.6} />
           </G>
         )}
-        <Mouth mood={mood} />
+        <Mouth mood={blobMood} />
         <FormFront form={shownForm} />
         {equipped.map((item) => (
           <Accessory key={item} item={item} />
@@ -364,6 +385,40 @@ function CookieIcon({ size }: { size: number }) {
   );
 }
 
+// Three "z"s drifting up and fading, over and over, while the pet sleeps.
+function Snores({ size }: { size: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(t, { toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: size * 0.62, top: size * 0.12 }}>
+      {[0, 1, 2].map((i) => {
+        // Each z runs a third of a cycle behind the one before.
+        const p = Animated.modulo(Animated.add(t, i / 3), 1);
+        return (
+          <Animated.View
+            key={i}
+            style={{
+              position: 'absolute',
+              opacity: p.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 0.8, 0] }),
+              transform: [
+                { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.14] }) },
+                { translateY: p.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.22] }) },
+                { scale: p.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }) },
+              ],
+            }}
+          >
+            <Text style={{ fontFamily: 'Baloo2_800ExtraBold', fontSize: Math.max(12, size * 0.13), color: '#8B9BD6' }}>z</Text>
+          </Animated.View>
+        );
+      })}
+    </View>
+  );
+}
+
 // The pet with an idle animation (a bounce when awake, slow breathing when sleepy, a wobble as an egg).
 // Tap it and it squishes, with hearts floating up.
 export function PetView({
@@ -382,7 +437,9 @@ export function PetView({
   const [floats, setFloats] = useState<Float[]>([]);
   const nextId = useRef(0);
   const reduced = useReducedMotion();
-  const sleepy = look.mood === 'sleepy';
+  const sleepy = look.mood === 'sleepy' || look.mood === 'asleep';
+  const asleep = look.mood === 'asleep' && look.stage !== 'egg';
+  const weak = look.mood === 'weak' && look.stage !== 'egg';
 
   const react = useCallback(
     (kind: 'heart' | 'treat' = 'heart') => {
@@ -416,20 +473,23 @@ export function PetView({
     if (reduced) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(t, { toValue: 1, duration: sleepy ? 2200 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(t, { toValue: 0, duration: sleepy ? 2200 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(t, { toValue: 1, duration: sleepy ? 2200 : weak ? 1600 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(t, { toValue: 0, duration: sleepy ? 2200 : weak ? 1600 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [t, sleepy, reduced]);
+  }, [t, sleepy, weak, reduced]);
 
   const idle =
     look.stage === 'egg'
       ? [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-4deg', '4deg'] }) }]
       : sleepy
         ? [{ scaleY: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }]
-        : [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }];
+        : weak
+          ? // A tired droop: sinks a little and leans, instead of bouncing.
+            [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.02] }) }, { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-2deg', '2deg'] }) }]
+          : [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }];
   // Squash wider and shorter, anchored near the feet.
   const squishTransform = [
     { translateY: squish.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.06] }) },
@@ -439,9 +499,10 @@ export function PetView({
 
   const body = (
     <View style={{ width: size, height: size }}>
-      <Animated.View style={{ transform: [...squishTransform, ...idle] }}>
+      <Animated.View style={{ transform: [...squishTransform, ...idle], opacity: weak ? 0.88 : 1 }}>
         <PetArt look={look} size={size} />
       </Animated.View>
+      {asleep && !reduced && <Snores size={size} />}
       {floats.map((f) => (
         <Animated.View
           key={f.id}

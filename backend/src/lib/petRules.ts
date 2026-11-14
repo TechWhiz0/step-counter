@@ -124,3 +124,26 @@ export function goldenTargets(seed: number, goal: number): number[] {
 export function randomItem(seed: number): string {
   return pick(rng(seed), GOLDEN_ITEMS);
 }
+
+// Energy, 5-100: how well-walked the pet has been lately.
+// `recent` is the last closed days (oldest first, up to 7, only days since the pet arrived); `today` is today's steps.
+// Recent days count most, a run of missed days drains extra, and walking today tops it back up.
+export const ENERGY_DAYS = 7;
+export function energyFor({ recent, goal, today }: { recent: number[]; goal: number; today: number }): number {
+  const days = recent.slice(-ENERGY_DAYS);
+  const ratio = (t: number) => Math.min(1, t / goal);
+  let base = 0.7; // a brand-new pet starts out fine
+  if (days.length) {
+    let sum = 0;
+    let weights = 0;
+    days.forEach((t, i) => {
+      sum += ratio(t) * (i + 1);
+      weights += i + 1;
+    });
+    base = sum / weights;
+  }
+  let missedRun = 0;
+  for (let i = days.length - 1; i >= 0 && ratio(days[i]) < 0.5; i--) missedRun++;
+  const energy = 25 + 60 * base - 10 * Math.max(0, missedRun - 1) + 30 * ratio(today);
+  return Math.round(Math.min(100, Math.max(5, energy)));
+}

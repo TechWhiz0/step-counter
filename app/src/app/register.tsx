@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { EggHeader, MeadowBackdrop } from '@/components/Doodles';
+import { GuideBubble, StepProgress } from '@/components/AuthArt';
 import { Button, ErrorText, Field, Muted, Screen, T, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
@@ -39,12 +39,11 @@ export default function Register() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <MeadowBackdrop height={110} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <Screen style={{ backgroundColor: 'transparent' }}>
-          <EggHeader />
-          <Muted style={{ textAlign: 'center' }}>Takes a minute. Then you get your egg.</Muted>
+          <StepProgress step={1} total={4} />
+          <GuideBubble text="Hi, I'm Mossy! Make an account and I'll help you pick an egg." />
           <Field label="Nickname" hint="Shown on group leaderboards" value={nickname} onChangeText={setNickname} maxLength={24} autoCapitalize="words" />
           <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
           <View style={{ gap: 8 }}>
@@ -55,9 +54,9 @@ export default function Register() {
                   key={i}
                   style={{
                     flex: 1,
-                    height: 5,
-                    borderRadius: 3,
-                    backgroundColor: i < strength ? (password.length >= 8 ? colors.good : colors.gold) : colors.surfaceAlt,
+                    height: 8,
+                    borderRadius: 999,
+                    backgroundColor: i < strength ? (password.length >= 8 ? colors.accent : colors.gold) : colors.surfaceAlt,
                   }}
                 />
               ))}
@@ -66,7 +65,8 @@ export default function Register() {
           </View>
           <ErrorText message={error} />
           <Button label="Create account" onPress={submit} busy={busy} disabled={!nickname || !email || password.length < 8} />
-          <Muted style={{ textAlign: 'center' }}>We only ever read your step count. No location, no heart rate.</Muted>
+          <Button label="I have an account" kind="secondary" onPress={() => router.replace('/login')} />
+          <Muted style={{ textAlign: 'center', fontSize: 13 }}>We only read your step count. No location, no heart rate.</Muted>
         </Screen>
       </ScrollView>
       </KeyboardAvoidingView>

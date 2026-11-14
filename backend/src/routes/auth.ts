@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
-import { me, requireAuth, signToken } from '../lib/auth.js';
+import { config, rules } from '../config.js';
+import { applyAdminEmail, me, requireAuth, signToken } from '../lib/auth.js';
 import type { UserDoc } from '../models/index.js';
 import { todayFor } from '../lib/game.js';
-import { GoldenDay, Group, Item, Pet, StepDay, Treat, User } from '../models/index.js';
+import { GoldenDay, Group, Item, Pet, QuestClaim, StepDay, Treat, User } from '../models/index.js';
 
 export const authRouter = Router();
 
@@ -24,6 +25,10 @@ function publicUser(u: UserDoc) {
     timezone: u.timezone,
     currentStreak: u.currentStreak,
     bestStreak: u.bestStreak,
+    role: u.role,
+    lifetimeSteps: u.lifetimeSteps,
+    treats: u.treats,
+    league: rules.leagueTiers[Math.min(u.league, rules.leagueTiers.length - 1)],
   };
 }
 
@@ -38,6 +43,7 @@ authRouter.post('/register', async (req, res) => {
     nickname: body.nickname,
     passwordHash: await bcrypt.hash(body.password, 10),
     timezone,
+    role: config.adminEmails.includes(body.email.toLowerCase()) ? 'admin' : 'user',
   });
   res.status(201).json({ token: signToken(String(user._id)), user: publicUser(user) });
 });
@@ -48,6 +54,7 @@ authRouter.post('/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return res.status(401).json({ error: 'Wrong email or password' });
   }
+  await applyAdminEmail(user);
   res.json({ token: signToken(String(user._id)), user: publicUser(user) });
 });
 
@@ -56,9 +63,9 @@ authRouter.get('/me', requireAuth, (req, res) => {
 });
 
 authRouter.patch('/me', requireAuth, async (req, res) => {
-  const body = z
-    .object({ nickname: z.string().trim().min(2).max(24).optional(), dailyGoal: z.number().int().min(1000).max(50000).optional() })
-    .parse(req.body);
+  // The nickname is chosen once at sign-up and can't be changed afterwards.
+  if (req.body && 'nickname' in req.body) return res.status(400).json({ error: "Nicknames can't be changed after sign-up" });
+  const body = z.object({ dailyGoal: z.number().int().min(1000).max(50000).optional() }).parse(req.body);
   const user = me(req);
   Object.assign(user, body);
   await user.save();
@@ -73,6 +80,7 @@ authRouter.delete('/me', requireAuth, async (req, res) => {
     StepDay.deleteMany({ userId }),
     Item.deleteMany({ userId }),
     GoldenDay.deleteMany({ userId }),
+    QuestClaim.deleteMany({ userId }),
     Treat.deleteMany({ $or: [{ fromUser: userId }, { toPet: { $in: pets.map((p) => p._id) } }] }),
     Pet.deleteMany({ userId }),
     Group.updateMany({ members: userId }, { $pull: { members: userId } }),

@@ -2,7 +2,17 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { me, requireAuth } from '../lib/auth.js';
 import { addDays, isDayKey } from '../lib/dates.js';
-import { activePet, checkGolden, closeDays, goldenHint, refreshPet, serializePet, todayFor } from '../lib/game.js';
+import {
+  activePet,
+  checkAnomalies,
+  checkGolden,
+  closeDays,
+  goldenHint,
+  refreshLifetime,
+  refreshPet,
+  serializePet,
+  todayFor,
+} from '../lib/game.js';
 import { cappedTotal } from '../lib/petRules.js';
 import { StepDay } from '../models/index.js';
 
@@ -37,6 +47,9 @@ stepsRouter.post('/sync', async (req, res) => {
     );
   }
 
+  await checkAnomalies(user, days);
+  // Before closing days: hatching picks a species from what lifetime steps have unlocked.
+  const unlockedItems = await refreshLifetime(user, today);
   await closeDays(user, today);
   const todayDoc = await StepDay.findOne({ userId: user._id, day: today }).lean();
   const todayTotal = todayDoc?.total ?? 0;
@@ -55,6 +68,9 @@ stepsRouter.post('/sync', async (req, res) => {
     pet: pet ? serializePet(pet) : null,
     surprises,
     golden,
+    lifetimeSteps: user.lifetimeSteps,
+    treats: user.treats,
+    unlockedItems,
   });
 });
 
@@ -64,7 +80,7 @@ stepsRouter.get('/history', async (req, res) => {
   const from = addDays(todayFor(user), -(days - 1));
   const rows = await StepDay.find({ userId: user._id, day: { $gte: from } })
     .sort({ day: 1 })
-    .select('day total goalMet -_id')
+    .select('day total goalMet hourly -_id')
     .lean();
   res.json({ days: rows });
 });

@@ -11,6 +11,7 @@ const LABELS: Record<string, string> = {
   'star-badge': 'Star badge',
   'scarf-gold': 'Golden scarf',
   crown: 'Crown',
+  'night-glow': 'Night glow set',
 };
 
 export const itemLabel = (item: string) => LABELS[item] ?? item;

@@ -3,7 +3,10 @@ import { Types } from 'mongoose';
 import { config, rules } from '../config.js';
 import { GoldenDay, Item, Pet, StepDay, type PetDoc, type UserDoc } from '../models/index.js';
 import { addDays, daysBetween, dayKey } from './dates.js';
+import { catalog, pickSpecies } from './species.js';
 import {
+  energyFor,
+  ENERGY_DAYS,
   formFor,
   goldenTargets,
   randomItem,
@@ -45,7 +48,12 @@ export async function refreshPet(pet: PetDoc, user: UserDoc, today: string) {
   const stage = stageFor(growth);
   pet.growth = growth;
   pet.stage = stage;
-  if (prevStage === 'egg' && stage !== 'egg' && !pet.hatchedAt) pet.hatchedAt = new Date();
+  if (prevStage === 'egg' && stage !== 'egg' && !pet.hatchedAt) {
+    pet.hatchedAt = new Date();
+    // What hatches depends on which monsters the owner has unlocked by walking.
+    const roll = (hashSeed(String(pet._id), 'species') % 10_000) / 10_000;
+    pet.species = pickSpecies(await catalog(), { lifetimeSteps: user.lifetimeSteps, bestStreak: user.bestStreak }, roll);
+  }
 
   if (stage === 'adult' && !pet.form) {
     const from = addDays(today, -rules.evolutionWindowDays);
@@ -66,6 +74,14 @@ export async function refreshPet(pet: PetDoc, user: UserDoc, today: string) {
       ? { ...fresh, hue: pet.traits.hue, size: pet.traits.size, markings: Math.max(fresh.markings, pet.traits.markings ?? 1) }
       : fresh;
   }
+  pet.energy = energyFor({
+    recent: days
+      .filter((d) => d.day < today && d.day >= addDays(today, -ENERGY_DAYS))
+      .sort((x, y) => x.day.localeCompare(y.day))
+      .map((d) => d.total),
+    goal: user.dailyGoal,
+    today: days.find((d) => d.day === today)?.total ?? 0,
+  });
   await pet.save();
   return pet;
 }
@@ -137,6 +153,36 @@ export async function closeDays(user: UserDoc, today: string) {
   }
 }
 
+// Recounts lifetime steps and grants any closet milestone items just passed. Returns the new items.
+export async function refreshLifetime(user: UserDoc, today: string): Promise<string[]> {
+  const [agg] = await StepDay.aggregate<{ total: number }>([
+    { $match: { userId: user._id } },
+    { $group: { _id: null, total: { $sum: '$cappedTotal' } } },
+  ]);
+  user.lifetimeSteps = agg?.total ?? 0;
+  await user.save();
+  const reached = rules.milestoneItems.filter((m) => m.steps <= user.lifetimeSteps).map((m) => m.item);
+  if (!reached.length) return [];
+  const owned = new Set(await Item.distinct('item', { userId: user._id, source: 'milestone', item: { $in: reached } }));
+  const fresh = reached.filter((i) => !owned.has(i));
+  if (fresh.length) await Item.insertMany(fresh.map((item) => ({ userId: user._id, item, source: 'milestone', day: today })));
+  return fresh;
+}
+
+// Flags the account when any synced hour looks like a shaken phone rather than walking.
+export async function checkAnomalies(user: UserDoc, days: { day: string; hourly: number[] }[]) {
+  if (user.flagged) return;
+  for (const d of days) {
+    const hour = d.hourly.findIndex((h) => h > rules.anomalyHourSteps);
+    if (hour >= 0) {
+      user.flagged = true;
+      user.flagReason = `${d.hourly[hour].toLocaleString('en')} steps in one hour on ${d.day} at ${hour}:00`;
+      await user.save();
+      return;
+    }
+  }
+}
+
 export function serializePet(pet: PetDoc) {
   const p = stageProgress(pet.growth);
   return {
@@ -148,6 +194,7 @@ export function serializePet(pet: PetDoc) {
     form: pet.form,
     traits: pet.traits,
     mood: pet.mood,
+    energy: pet.energy,
     equipped: pet.equipped,
     growth: pet.growth,
     nextStage: p.next,

@@ -1,0 +1,7 @@
+.claude
+.agents
+skills-lock.json
+/backend/scripts
+/backend/test
+
+

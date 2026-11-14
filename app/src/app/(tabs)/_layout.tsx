@@ -1,62 +1,96 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import { useEffect, useRef } from 'react';
-import { Animated, type ColorValue } from 'react-native';
+import { useEffect, useRef, type ComponentType } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from '@/components/icons';
 import { fonts, useColors } from '@/components/ui';
 import { haptic } from '@/lib/feel';
 import { useSession } from '@/lib/session';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconCmp = ComponentType<{ size?: number; color?: string }>;
 
-// The selected tab's icon fills in and pops up with a little bounce.
-function TabIcon({ on, off, color, focused }: { on: IconName; off: IconName; color: ColorValue; focused: boolean }) {
-  const lift = useRef(new Animated.Value(focused ? 1 : 0)).current;
+const TABS: Record<string, { label: string; icon: IconCmp }> = {
+  index: { label: 'Home', icon: Icon.paw },
+  path: { label: 'Path', icon: Icon.path },
+  leagues: { label: 'Leagues', icon: Icon.shield },
+  closet: { label: 'Closet', icon: Icon.bag },
+  me: { label: 'Me', icon: Icon.person },
+};
+
+// The selected tab sits in a soft green pill outlined in grass, and pops in with a little bounce.
+function TabButton({ name, focused, onPress }: { name: string; focused: boolean; onPress: () => void }) {
+  const c = useColors();
+  const tab = TABS[name];
+  const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
-    Animated.spring(lift, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 20, bounciness: 14 }).start();
-  }, [focused, lift]);
+    Animated.spring(pop, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 20, bounciness: 12 }).start();
+  }, [focused, pop]);
+  if (!tab) return null;
+  const color = focused ? c.accent : c.muted;
+  const Glyph = tab.icon;
   return (
-    <Animated.View
-      style={{
-        transform: [
-          { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) },
-          { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) },
-        ],
-      }}
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={tab.label}
+      onPress={onPress}
+      style={styles.tab}
     >
-      <Ionicons name={focused ? on : off} color={color as string} size={24} />
-    </Animated.View>
+      <Animated.View
+        style={[
+          styles.tabIcon,
+          focused && { backgroundColor: c.accentSoft, borderColor: c.accent },
+          { transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }] },
+        ]}
+      >
+        <Glyph size={22} color={color} />
+      </Animated.View>
+      <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
+    </Pressable>
   );
 }
 
-const icon =
-  (on: IconName, off: IconName) =>
-  ({ color, focused }: { color: ColorValue; focused: boolean }) => <TabIcon on={on} off={off} color={color} focused={focused} />;
-
 export default function TabsLayout() {
-  const colors = useColors();
+  const c = useColors();
+  const insets = useSafeAreaInsets();
   const { status } = useSession();
   if (status === 'signedOut') return <Redirect href="/welcome" />;
   return (
     <Tabs
-      screenListeners={{ tabPress: () => haptic.select() }}
-      screenOptions={{
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.faint,
-        tabBarLabelStyle: { fontFamily: fonts.bodyBold, fontSize: 12 },
-        tabBarStyle: { backgroundColor: colors.surface, borderTopWidth: 0, paddingTop: 6, elevation: 12, shadowOpacity: 0.06, shadowRadius: 12 },
-        headerStyle: { backgroundColor: colors.bg },
-        headerShadowVisible: false,
-        headerTintColor: colors.ink,
-        headerTitleStyle: { fontFamily: fonts.display, fontSize: 24 },
-        headerTitleAlign: 'left',
-        sceneStyle: { backgroundColor: colors.bg },
-      }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg } }}
+      tabBar={({ state, navigateToTab }) => (
+        <View style={[styles.bar, { backgroundColor: c.tabBg, borderTopColor: c.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {state.routes.map((route, i) => {
+            const focused = state.index === i;
+            return (
+              <TabButton
+                key={route.key}
+                name={route.name}
+                focused={focused}
+                onPress={() => {
+                  if (focused) return;
+                  haptic.select();
+                  navigateToTab(route.key);
+                }}
+              />
+            );
+          })}
+        </View>
+      )}
     >
-      <Tabs.Screen name="index" options={{ title: 'My pet', headerShown: false, tabBarIcon: icon('paw', 'paw-outline') }} />
-      <Tabs.Screen name="groups" options={{ title: 'Groups', tabBarIcon: icon('people', 'people-outline') }} />
-      <Tabs.Screen name="collection" options={{ title: 'Collection', tabBarIcon: icon('sparkles', 'sparkles-outline') }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: icon('settings', 'settings-outline') }} />
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="path" />
+      <Tabs.Screen name="leagues" />
+      <Tabs.Screen name="closet" />
+      <Tabs.Screen name="me" />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  bar: { flexDirection: 'row', borderTopWidth: 2, paddingTop: 8 },
+  tab: { flex: 1, alignItems: 'center', gap: 2 },
+  tabIcon: { width: 52, height: 36, borderRadius: 12, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  tabLabel: { fontFamily: fonts.bodyHeavy, fontSize: 11 },
+});

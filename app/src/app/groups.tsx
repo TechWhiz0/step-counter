@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, ErrorText, Field, Muted, Pill, radius, shadow, T, Tap, useColors } from '@/components/ui';
+import { Icon } from '@/components/icons';
+import { Button, Card, ErrorText, Field, Muted, Pill, radius, T, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Palette } from '@/lib/theme';
 import type { Group } from '@/lib/types';
@@ -63,7 +63,7 @@ export default function Groups() {
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       {groups.length === 0 ? (
         <Card style={styles.empty}>
-          <T v="hero">👟</T>
+          <Icon.users size={44} color={colors.accent} />
           <T v="h2">Walk together</T>
           <Muted style={{ textAlign: 'center' }}>Join your batch or team with a code, or start a group and share its code.</Muted>
         </Card>
@@ -82,7 +82,7 @@ export default function Groups() {
                 <Pill tone="soft" style={{ paddingVertical: 2, paddingHorizontal: 8 }}>{g.code}</Pill>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.faint} />
+            <Icon.chevronRight size={20} color={colors.muted} />
           </Tap>
         ))
       )}
@@ -104,8 +104,18 @@ export default function Groups() {
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
-  scroll: { padding: 20, gap: 14, paddingBottom: 40 },
+  scroll: { padding: 18, gap: 12, paddingBottom: 40 },
   empty: { alignItems: 'center', paddingVertical: 28, gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface, borderRadius: radius.lg, padding: 14, ...shadow },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 2,
+    borderBottomWidth: 5,
+    borderRadius: 22,
+    padding: 14,
+  },
   avatar: { width: 52, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });
