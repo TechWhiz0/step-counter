@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { Animated, Easing, Pressable, View } from 'react-native';
+import { haptic, useReducedMotion } from '@/lib/feel';
 import Svg, { Circle, Defs, Ellipse, G, Line, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Form, Mood, Stage, Traits } from '@/lib/types';
 
@@ -331,11 +332,88 @@ export function PetArt({ look, size = 220 }: { look: PetLook; size?: number }) {
   );
 }
 
-// The pet with an idle animation: a bounce when awake, slow breathing when sleepy, a wobble as an egg.
-export function PetView({ look, size = 220 }: { look: PetLook; size?: number }) {
+export interface PetHandle {
+  // Plays the "petted" reaction: a squish and a few floating hearts (or cookies for a treat).
+  react: (kind?: 'heart' | 'treat') => void;
+}
+
+interface Float {
+  id: number;
+  x: number;
+  kind: 'heart' | 'treat';
+  t: Animated.Value;
+}
+
+function HeartIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.6.7-1.4 2.2-2.6 4.3-2.6 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z" fill={color} />
+    </Svg>
+  );
+}
+
+function CookieIcon({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={10} fill="#E0A458" />
+      <Circle cx={8} cy={9} r={1.6} fill="#6B3E1E" />
+      <Circle cx={15} cy={8} r={1.3} fill="#6B3E1E" />
+      <Circle cx={14} cy={15} r={1.7} fill="#6B3E1E" />
+      <Circle cx={8.5} cy={15} r={1.1} fill="#6B3E1E" />
+    </Svg>
+  );
+}
+
+// The pet with an idle animation (a bounce when awake, slow breathing when sleepy, a wobble as an egg).
+// Tap it and it squishes, with hearts floating up.
+export function PetView({
+  look,
+  size = 220,
+  onPet,
+  ref,
+}: {
+  look: PetLook;
+  size?: number;
+  onPet?: () => void;
+  ref?: Ref<PetHandle>;
+}) {
   const t = useRef(new Animated.Value(0)).current;
+  const squish = useRef(new Animated.Value(0)).current;
+  const [floats, setFloats] = useState<Float[]>([]);
+  const nextId = useRef(0);
+  const reduced = useReducedMotion();
   const sleepy = look.mood === 'sleepy';
+
+  const react = useCallback(
+    (kind: 'heart' | 'treat' = 'heart') => {
+      if (!reduced) {
+        squish.setValue(0);
+        Animated.sequence([
+          Animated.timing(squish, { toValue: 1, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.spring(squish, { toValue: 0, friction: 3, tension: 120, useNativeDriver: true }),
+        ]).start();
+      }
+      const count = kind === 'treat' ? 4 : 3;
+      const added: Float[] = Array.from({ length: count }, (_, i) => ({
+        id: nextId.current++,
+        x: (Math.random() - 0.5) * size * 0.55 + (i - (count - 1) / 2) * 12,
+        kind,
+        t: new Animated.Value(0),
+      }));
+      setFloats((f) => [...f.slice(-8), ...added]);
+      added.forEach((f, i) =>
+        Animated.timing(f.t, { toValue: 1, duration: 1100 + i * 140, delay: i * 70, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() =>
+          setFloats((all) => all.filter((x) => x.id !== f.id)),
+        ),
+      );
+    },
+    [reduced, size, squish],
+  );
+
+  useImperativeHandle(ref, () => ({ react }), [react]);
+
   useEffect(() => {
+    if (reduced) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(t, { toValue: 1, duration: sleepy ? 2200 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -344,20 +422,59 @@ export function PetView({ look, size = 220 }: { look: PetLook; size?: number }) 
     );
     loop.start();
     return () => loop.stop();
-  }, [t, sleepy]);
+  }, [t, sleepy, reduced]);
 
-  const style =
+  const idle =
     look.stage === 'egg'
-      ? { transform: [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-4deg', '4deg'] }) }] }
+      ? [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-4deg', '4deg'] }) }]
       : sleepy
-        ? { transform: [{ scaleY: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }] }
-        : { transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }] };
+        ? [{ scaleY: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }]
+        : [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }];
+  // Squash wider and shorter, anchored near the feet.
+  const squishTransform = [
+    { translateY: squish.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.06] }) },
+    { scaleX: squish.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
+    { scaleY: squish.interpolate({ inputRange: [0, 1], outputRange: [1, 0.86] }) },
+  ];
 
-  return (
+  const body = (
     <View style={{ width: size, height: size }}>
-      <Animated.View style={style}>
+      <Animated.View style={{ transform: [...squishTransform, ...idle] }}>
         <PetArt look={look} size={size} />
       </Animated.View>
+      {floats.map((f) => (
+        <Animated.View
+          key={f.id}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: size / 2 - 12 + f.x,
+            top: size * 0.32,
+            opacity: f.t.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] }),
+            transform: [
+              { translateY: f.t.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.45] }) },
+              { scale: f.t.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.4, 1.1, 0.9] }) },
+            ],
+          }}
+        >
+          {f.kind === 'treat' ? <CookieIcon size={24} /> : <HeartIcon size={24} color="#FF5C7A" />}
+        </Animated.View>
+      ))}
     </View>
+  );
+
+  if (!onPet) return body;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Pet ${look.stage === 'egg' ? 'the egg' : 'your pet'}`}
+      onPress={() => {
+        haptic.tap();
+        react();
+        onPet();
+      }}
+    >
+      {body}
+    </Pressable>
   );
 }

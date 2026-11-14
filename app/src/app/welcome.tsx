@@ -1,25 +1,60 @@
 import { router } from 'expo-router';
-import { Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PetView } from '@/components/PetView';
 import { ServerSetting } from '@/components/ServerSetting';
-import { Button, colors, Muted } from '@/components/ui';
+import { Sky } from '@/components/Sky';
+import { Button, colors, radius, T } from '@/components/ui';
+
+const POINTS = [
+  { icon: '🥚', text: 'Hatches after your first 5,000 steps' },
+  { icon: '🌗', text: 'When you walk shapes what it becomes' },
+  { icon: '✦', text: 'Hidden golden steps hide surprises' },
+];
 
 export default function Welcome() {
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'space-between' }}>
-      <View style={{ alignItems: 'center', gap: 12, marginTop: 40 }}>
-        <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: 0.6 }} size={220} />
-        <Text style={{ fontSize: 34, fontWeight: '900', color: colors.ink }}>Step Pet</Text>
-        <Muted style={{ textAlign: 'center', fontSize: 16 }}>
-          Walk to hatch your egg. Your pet grows with every step, and how you walk decides what it becomes. No two pets are alike.
-        </Muted>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Sky style={[styles.sky, { paddingTop: insets.top + 24 }]}>
+        <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: 0.6 }} size={210} onPet={() => {}} />
+      </Sky>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={{ gap: 8 }}>
+          <T v="hero">Step Pet</T>
+          <T v="body" style={{ color: colors.muted }}>A pet that grows from your walks. No two are alike.</T>
+        </View>
+        <View style={{ gap: 10 }}>
+          {POINTS.map((p) => (
+            <View key={p.text} style={styles.point}>
+              <View style={styles.pointIcon}>
+                <T v="h3">{p.icon}</T>
+              </View>
+              <T v="bodyStrong" style={{ flex: 1, fontSize: 15 }}>{p.text}</T>
+            </View>
+          ))}
+        </View>
+        <View style={{ gap: 10 }}>
+          <Button label="Get started" onPress={() => router.push('/register')} />
+          <Button label="I already have an account" kind="ghost" onPress={() => router.push('/login')} />
+          <ServerSetting />
+        </View>
       </View>
-      <View style={{ gap: 12 }}>
-        <Button label="Get started" onPress={() => router.push('/register')} />
-        <Button label="I already have an account" kind="secondary" onPress={() => router.push('/login')} />
-        <ServerSetting />
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  sky: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
+  sheet: {
+    backgroundColor: colors.bg,
+    marginTop: -radius.xl,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    gap: 22,
+  },
+  point: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pointIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+});

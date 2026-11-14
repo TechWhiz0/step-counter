@@ -14,3 +14,19 @@ const LABELS: Record<string, string> = {
 };
 
 export const itemLabel = (item: string) => LABELS[item] ?? item;
+
+const EMOJI: Record<string, string> = {
+  cap: '🧢',
+  bow: '🎀',
+  glasses: '👓',
+  flower: '🌸',
+  scarf: '🧣',
+  headphones: '🎧',
+  leaf: '🍃',
+  balloon: '🎈',
+  'star-badge': '⭐',
+  'scarf-gold': '🏅',
+  crown: '👑',
+};
+
+export const itemEmoji = (item: string) => EMOJI[item] ?? '🎁';

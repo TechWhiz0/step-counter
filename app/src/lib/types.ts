@@ -51,6 +51,14 @@ export interface SyncResult {
   streak: { current: number; best: number };
   pet: Pet | null;
   surprises: Surprise[];
+  // Missing from results cached by older app versions.
+  golden?: GoldenHint;
+}
+
+export interface GoldenHint {
+  found: number;
+  total: number;
+  hint: 'cold' | 'warm' | 'hot' | null;
 }
 
 export interface Group {

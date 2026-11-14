@@ -1,9 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, Share, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Easing, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import { PetArt } from '@/components/PetView';
-import { Button, colors, ErrorText, Muted } from '@/components/ui';
+import { Button, colors, ErrorText, Muted, Pill, radius, shadow, T, Tap } from '@/components/ui';
 import { api } from '@/lib/api';
+import { useReducedMotion } from '@/lib/feel';
 import type { Group, LeaderboardRow } from '@/lib/types';
 
 interface Board {
@@ -13,7 +15,14 @@ interface Board {
   rows: LeaderboardRow[];
 }
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+// Podium order on screen: 2nd, 1st, 3rd.
+const PODIUM = [
+  { rank: 2, height: 78, color: '#C9D3DF' },
+  { rank: 1, height: 112, color: '#FFD27A' },
+  { rank: 3, height: 58, color: '#F2B98C' },
+];
+
+const visit = (row: LeaderboardRow) => !row.isMe && router.push({ pathname: '/friend/[userId]', params: { userId: row.userId } });
 
 export default function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,62 +60,99 @@ export default function GroupScreen() {
     ]);
   }
 
+  const rows = board?.rows ?? [];
+  const top = rows.slice(0, 3);
+  const rest = rows.slice(3);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Stack.Screen options={{ title: board?.group.name ?? 'Leaderboard' }} />
       <FlatList
-        data={board?.rows ?? []}
+        data={rest}
         keyExtractor={(r) => r.userId}
-        contentContainerStyle={{ padding: 20, gap: 10 }}
+        contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.accent} />}
         ListHeaderComponent={
-          board ? (
-            <View style={{ gap: 8, marginBottom: 6 }}>
-              <Muted>
-                This week ({board.week.from} to {board.week.to}). Steps above {board.hourlyCap.toLocaleString()} in one hour don't count.
-              </Muted>
-              <Button
-                label={`Invite: code ${board.group.code}`}
-                kind="secondary"
-                onPress={() => Share.share({ message: `Join "${board.group.name}" on Step Pet with code ${board.group.code}` })}
-              />
-              <ErrorText message={error} />
-            </View>
-          ) : (
+          <View style={{ gap: 14, marginBottom: 6 }}>
             <ErrorText message={error} />
-          )
+            {board && (
+              <>
+                <Muted>
+                  This week, {board.week.from} to {board.week.to}. Steps above {board.hourlyCap.toLocaleString()} in one hour don't count.
+                </Muted>
+                {top.length > 0 && <Podium rows={top} />}
+                <Button
+                  label={`Invite with code ${board.group.code}`}
+                  kind="secondary"
+                  icon={<Ionicons name="paper-plane" size={16} color={colors.accentDeep} />}
+                  onPress={() => Share.share({ message: `Join "${board.group.name}" on Step Pet with code ${board.group.code}` })}
+                />
+              </>
+            )}
+          </View>
         }
         renderItem={({ item }) => (
-          <Pressable
-            disabled={item.isMe}
-            onPress={() => router.push({ pathname: '/friend/[userId]', params: { userId: item.userId } })}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-              padding: 12,
-              borderRadius: 16,
-              backgroundColor: item.isMe ? colors.accentSoft : colors.card,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <Text style={{ width: 32, fontSize: 18, fontWeight: '800', color: colors.ink, textAlign: 'center' }}>
-              {MEDALS[item.rank - 1] ?? item.rank}
-            </Text>
-            {item.pet ? <PetArt look={item.pet} size={52} /> : <View style={{ width: 52 }} />}
+          <Tap disabled={item.isMe} onPress={() => visit(item)} scaleTo={0.98} style={[styles.row, item.isMe && styles.rowMe]}>
+            <T v="number" style={styles.rank}>{item.rank}</T>
+            {item.pet ? <PetArt look={item.pet} size={48} /> : <View style={{ width: 48 }} />}
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>
+              <T v="h3">
                 {item.nickname}
                 {item.isMe ? ' (you)' : ''}
-              </Text>
-              <Muted>🔥 {item.streak} day streak</Muted>
+              </T>
+              <Muted style={{ fontSize: 13 }}>🔥 {item.streak} day streak</Muted>
             </View>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.ink }}>{item.steps.toLocaleString()}</Text>
-          </Pressable>
+            <T v="number" style={{ fontSize: 17 }}>{item.steps.toLocaleString()}</T>
+          </Tap>
         )}
         ListFooterComponent={board ? <View style={{ marginTop: 16 }}><Button label="Leave group" kind="danger" onPress={leave} /></View> : undefined}
       />
     </View>
   );
 }
+
+// Top three stand on blocks that rise in when the board loads. Tap a friend's pet to visit.
+function Podium({ rows }: { rows: LeaderboardRow[] }) {
+  const reduced = useReducedMotion();
+  const rise = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    Animated.timing(rise, { toValue: 1, duration: 700, easing: Easing.out(Easing.back(1.4)), useNativeDriver: false }).start();
+  }, [reduced, rise]);
+
+  return (
+    <View style={styles.podium}>
+      {PODIUM.map((slot) => {
+        const row = rows.find((r) => r.rank === slot.rank);
+        if (!row) return <View key={slot.rank} style={{ flex: 1 }} />;
+        return (
+          <Tap key={slot.rank} disabled={row.isMe} onPress={() => visit(row)} style={styles.podiumCol} scaleTo={0.97}>
+            {slot.rank === 1 && <T v="h2" style={{ marginBottom: -6 }}>👑</T>}
+            {row.pet ? <PetArt look={row.pet} size={slot.rank === 1 ? 84 : 66} /> : <View style={{ height: 66 }} />}
+            <T v="h3" numberOfLines={1} style={{ fontSize: 14 }}>{row.isMe ? 'You' : row.nickname}</T>
+            <Pill tone="glass" style={{ alignSelf: 'center', paddingVertical: 2, backgroundColor: colors.surface }}>
+              {row.steps.toLocaleString()}
+            </Pill>
+            <Animated.View
+              style={[
+                styles.block,
+                { backgroundColor: slot.color, height: rise.interpolate({ inputRange: [0, 1], outputRange: [8, slot.height] }) },
+              ]}
+            >
+              <T v="title" style={{ color: colors.ink, opacity: 0.7 }}>{slot.rank}</T>
+            </Animated.View>
+          </Tap>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.lg, backgroundColor: colors.surface, ...shadow },
+  rowMe: { backgroundColor: colors.accentSoft },
+  rank: { width: 28, textAlign: 'center', fontSize: 17, color: colors.muted },
+  podium: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingTop: 8 },
+  podiumCol: { flex: 1, alignItems: 'center', gap: 6 },
+  block: { alignSelf: 'stretch', borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md, alignItems: 'center', paddingTop: 8, marginTop: 4 },
+});

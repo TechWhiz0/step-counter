@@ -42,6 +42,15 @@ export async function getStepDay(day: string) {
   return row ? { hourly: JSON.parse(row.hourly) as number[], total: row.total } : null;
 }
 
+// Steps per hour of day, summed over the cached days (up to the last 7).
+export async function getHourlySums(days = 7) {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ hourly: string }>('SELECT hourly FROM step_days ORDER BY day DESC LIMIT ?', days);
+  const sums = Array(24).fill(0) as number[];
+  for (const r of rows) (JSON.parse(r.hourly) as number[]).forEach((h, i) => (sums[i] += h));
+  return sums;
+}
+
 export async function getJson<T>(key: string): Promise<T | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM kv WHERE key = ?', key);

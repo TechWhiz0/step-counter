@@ -19,5 +19,8 @@ export const rules = {
   // A time band must hold at least this share of steps to decide the form.
   dominantShare: 0.45,
   goldenStepsPerDay: 3,
+  // The radar says "hot" within this many steps of the next golden step, "warm" within the second.
+  goldenHot: 300,
+  goldenWarm: 1200,
   streakRewards: { 7: 'star-badge', 14: 'scarf-gold', 30: 'crown' } as Record<number, string>,
 };

@@ -1,14 +1,20 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
-import { PetView } from '@/components/PetView';
-import { Button, colors, ErrorText, Muted, Screen } from '@/components/ui';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PetView, type PetHandle } from '@/components/PetView';
+import { Sky } from '@/components/Sky';
+import { Button, colors, ErrorText, Muted, Pill, radius, T } from '@/components/ui';
 import { api } from '@/lib/api';
+import { bandFor, haptic, SKY } from '@/lib/feel';
 import { FORM_LABEL, moodLine, STAGE_LABEL } from '@/lib/petText';
 import type { Pet } from '@/lib/types';
 
 export default function FriendScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
+  const insets = useSafeAreaInsets();
+  const petRef = useRef<PetHandle>(null);
   const [data, setData] = useState<{ nickname: string; streak: number; pet: Pet | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -26,7 +32,9 @@ export default function FriendScreen() {
     try {
       const { pet } = await api<{ pet: Pet }>(`/friends/${userId}/treat`, { method: 'POST' });
       setData((d) => (d ? { ...d, pet } : d));
-      setNote(`${pet.name} loved it! 🍪`);
+      petRef.current?.react('treat');
+      haptic.success();
+      setNote(`${pet.name} loved it!`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -35,27 +43,62 @@ export default function FriendScreen() {
   }
 
   const pet = data?.pet;
+  const band = bandFor(new Date().getHours());
+  const light = SKY[band].light;
+
   return (
-    <Screen style={{ alignItems: 'center' }}>
-      <Stack.Screen options={{ title: data ? `${data.nickname}'s pet` : 'Visit' }} />
-      <ErrorText message={error} />
-      {data && !pet && <Muted>{data.nickname} hasn't got a pet yet.</Muted>}
-      {pet && (
-        <>
-          <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>{pet.name}</Text>
-          <Muted>{pet.stage === 'adult' && pet.form ? FORM_LABEL[pet.form].name : STAGE_LABEL[pet.stage]}</Muted>
-          <PetView look={pet} size={240} />
-          <Text style={{ fontSize: 16, color: colors.ink, textAlign: 'center' }}>{moodLine(pet)}</Text>
-          <Muted>
-            🔥 {data.streak} day streak · {pet.treatsReceived} treats received
-          </Muted>
-          <View style={{ alignSelf: 'stretch', gap: 8 }}>
-            {note ? <Text style={{ textAlign: 'center', fontSize: 16, color: colors.good }}>{note}</Text> : null}
-            <Button label="Send a treat" onPress={treat} busy={busy} disabled={!!note} />
-            <Muted style={{ textAlign: 'center' }}>One treat per friend per day. A treat cheers up a sleepy pet.</Muted>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 32 }}>
+      <Stack.Screen options={{ headerTintColor: light ? '#fff' : colors.ink }} />
+      <StatusBar style={light ? 'light' : 'dark'} />
+      <Sky band={band} style={[styles.hero, { paddingTop: insets.top + 56 }]}>
+        {data && (
+          <T v="label" style={{ color: light ? '#C9D6EA' : colors.muted }}>
+            Visiting {data.nickname}
+          </T>
+        )}
+        {pet ? (
+          <>
+            <PetView ref={petRef} look={pet} size={230} onPet={() => {}} />
+            <T v="title" style={{ color: light ? '#fff' : colors.ink }}>{pet.name}</T>
+            <Pill tone="glass" style={{ alignSelf: 'center' }}>
+              {pet.stage === 'adult' && pet.form ? FORM_LABEL[pet.form].name : STAGE_LABEL[pet.stage]}
+            </Pill>
+          </>
+        ) : (
+          <View style={{ height: 200, justifyContent: 'center' }}>
+            {data && <Muted>{data.nickname} hasn't got a pet yet.</Muted>}
           </View>
-        </>
-      )}
-    </Screen>
+        )}
+      </Sky>
+
+      <View style={styles.body}>
+        <ErrorText message={error} />
+        {pet && data && (
+          <>
+            <T v="body" style={{ textAlign: 'center' }}>{moodLine(pet)}</T>
+            <View style={styles.stats}>
+              <View style={styles.stat}>
+                <T v="number">🔥 {data.streak}</T>
+                <Muted style={{ fontSize: 12 }}>day streak</Muted>
+              </View>
+              <View style={styles.stat}>
+                <T v="number">🍪 {pet.treatsReceived}</T>
+                <Muted style={{ fontSize: 12 }}>treats received</Muted>
+              </View>
+            </View>
+            {note ? <T v="h3" style={{ textAlign: 'center', color: colors.good }}>{note}</T> : null}
+            <Button label={note ? 'Treat sent' : 'Send a treat'} onPress={treat} busy={busy} disabled={!!note} />
+            <Muted style={{ textAlign: 'center' }}>One treat per friend per day. A treat cheers up a sleepy pet.</Muted>
+          </>
+        )}
+      </View>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  hero: { alignItems: 'center', gap: 6, paddingBottom: 40, borderBottomLeftRadius: radius.xl + 8, borderBottomRightRadius: radius.xl + 8 },
+  body: { padding: 20, gap: 14 },
+  stats: { flexDirection: 'row', gap: 12 },
+  stat: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.lg, padding: 14, alignItems: 'center', gap: 2 },
+});

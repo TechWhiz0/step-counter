@@ -97,6 +97,15 @@ export async function checkGolden(user: UserDoc, day: string, total: number) {
   return surprises;
 }
 
+// A warmer/colder hint for the home screen radar. Never reveals the number itself.
+export async function goldenHint(user: UserDoc, day: string, total: number) {
+  const gd = await goldenDay(user, day);
+  const ahead = gd.targets.filter((t) => t > total && !gd.found.includes(t));
+  const gap = ahead.length ? Math.min(...ahead) - total : null;
+  const hint = gap === null ? null : gap <= rules.goldenHot ? 'hot' : gap <= rules.goldenWarm ? 'warm' : 'cold';
+  return { found: gd.found.length, total: gd.targets.length, hint };
+}
+
 // Closes every finished day since the last close: goal result, streak, mood, streak rewards.
 export async function closeDays(user: UserDoc, today: string) {
   const yesterday = addDays(today, -1);

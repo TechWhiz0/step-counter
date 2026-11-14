@@ -1,17 +1,23 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PetView } from '@/components/PetView';
-import { Button, colors, ErrorText, Field, Muted, Title } from '@/components/ui';
+import { Button, Chip, colors, ErrorText, Field, Muted, radius, T, Title } from '@/components/ui';
 import { api } from '@/lib/api';
+import { haptic } from '@/lib/feel';
 import { healthStatus, requestStepAccess, type HealthStatus } from '@/lib/health';
 import { setupNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 import { syncSteps } from '@/lib/sync';
 import type { User } from '@/lib/types';
 
-const GOALS = [4000, 6000, 8000, 10000];
+const GOALS = [
+  { steps: 4000, name: 'Easy' },
+  { steps: 6000, name: 'Steady' },
+  { steps: 8000, name: 'Active' },
+  { steps: 10000, name: 'Athlete' },
+];
 const HEALTH_CONNECT_STORE = 'market://details?id=com.google.android.apps.healthdata';
 
 export default function Onboarding() {
@@ -34,7 +40,10 @@ export default function Onboarding() {
     try {
       const ok = await requestStepAccess();
       if (!ok) setError('Step access was not given. Your egg can only hatch from steps, so please allow it.');
-      else setStep(1);
+      else {
+        haptic.success();
+        setStep(1);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -59,6 +68,7 @@ export default function Onboarding() {
       }
       await setupNotifications().catch(() => false);
       await syncSteps().catch(() => null);
+      haptic.success();
       router.replace('/(tabs)');
     } catch (e) {
       setError((e as Error).message);
@@ -69,9 +79,14 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 24, gap: 18, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View style={{ alignItems: 'center' }}>
-          <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: step * 0.4 }} size={170} />
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.dots}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[styles.dot, i === step && styles.dotOn, i < step && styles.dotDone]} />
+          ))}
+        </View>
+        <View style={styles.eggStage}>
+          <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: step * 0.4 }} size={170} onPet={() => {}} />
         </View>
 
         {step === 0 && (
@@ -91,7 +106,7 @@ export default function Onboarding() {
             ) : (
               <Button label="Allow step access" onPress={allowSteps} busy={busy} />
             )}
-            <Button label="Check again" kind="secondary" onPress={() => healthStatus().then(setHealth)} />
+            <Button label="Check again" kind="ghost" onPress={() => healthStatus().then(setHealth)} />
           </>
         )}
 
@@ -99,22 +114,14 @@ export default function Onboarding() {
           <>
             <Title>Name your egg</Title>
             <Muted>It hatches after your first 5,000 steps. What's inside is a surprise.</Muted>
-            <Field label="Pet name" value={name} onChangeText={setName} maxLength={20} autoFocus />
-            <Text style={{ fontWeight: '700', color: colors.ink }}>Daily step goal</Text>
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <Field label="Pet name" value={name} onChangeText={setName} maxLength={20} autoFocus placeholder="e.g. Mochi" />
+            <T v="label">Daily step goal</T>
+            <View style={styles.goals}>
               {GOALS.map((g) => (
-                <Pressable
-                  key={g}
-                  onPress={() => setGoal(g)}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                    borderRadius: 12,
-                    backgroundColor: g === goal ? colors.accent : colors.accentSoft,
-                  }}
-                >
-                  <Text style={{ color: g === goal ? '#fff' : colors.ink, fontWeight: '700' }}>{g.toLocaleString()}</Text>
-                </Pressable>
+                <View key={g.steps} style={{ alignItems: 'center', gap: 4 }}>
+                  <Chip label={g.steps.toLocaleString()} on={g.steps === goal} onPress={() => setGoal(g.steps)} />
+                  <T v="small" style={{ fontSize: 12 }}>{g.name}</T>
+                </View>
               ))}
             </View>
             <Button label="Next" onPress={() => setStep(2)} disabled={!name.trim()} />
@@ -128,10 +135,20 @@ export default function Onboarding() {
             <Field label="Group code (optional)" value={code} onChangeText={(t) => setCode(t.toUpperCase())} autoCapitalize="characters" maxLength={6} />
             <ErrorText message={error} />
             <Button label={`Meet ${name.trim() || 'my egg'}`} onPress={finish} busy={busy} />
-            <Button label="Back" kind="secondary" onPress={() => setStep(1)} />
+            <Button label="Back" kind="ghost" onPress={() => setStep(1)} />
           </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  scroll: { padding: 24, gap: 18, flexGrow: 1 },
+  dots: { flexDirection: 'row', gap: 6, alignSelf: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.line },
+  dotOn: { width: 28, backgroundColor: colors.accent },
+  dotDone: { backgroundColor: colors.accentSoft },
+  eggStage: { alignItems: 'center', backgroundColor: colors.accentSoft, borderRadius: radius.xl, paddingVertical: 12 },
+  goals: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+});

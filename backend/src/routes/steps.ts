@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { me, requireAuth } from '../lib/auth.js';
 import { addDays, isDayKey } from '../lib/dates.js';
-import { activePet, checkGolden, closeDays, refreshPet, serializePet, todayFor } from '../lib/game.js';
+import { activePet, checkGolden, closeDays, goldenHint, refreshPet, serializePet, todayFor } from '../lib/game.js';
 import { cappedTotal } from '../lib/petRules.js';
 import { StepDay } from '../models/index.js';
 
@@ -41,6 +41,7 @@ stepsRouter.post('/sync', async (req, res) => {
   const todayDoc = await StepDay.findOne({ userId: user._id, day: today }).lean();
   const todayTotal = todayDoc?.total ?? 0;
   const surprises = await checkGolden(user, today, todayTotal);
+  const golden = await goldenHint(user, today, todayTotal);
 
   const pet = await activePet(user._id);
   if (pet) {
@@ -53,6 +54,7 @@ stepsRouter.post('/sync', async (req, res) => {
     streak: { current: user.currentStreak, best: user.bestStreak },
     pet: pet ? serializePet(pet) : null,
     surprises,
+    golden,
   });
 });
 

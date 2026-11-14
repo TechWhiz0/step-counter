@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { PetView } from '@/components/PetView';
-import { Button, ErrorText, Field, Muted, Screen } from '@/components/ui';
+import { Button, colors, ErrorText, Field, Muted, radius, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
+import { haptic } from '@/lib/feel';
 import { syncSteps } from '@/lib/sync';
 
 export default function NewEgg() {
@@ -17,6 +18,7 @@ export default function NewEgg() {
     try {
       await api('/pet/new-egg', { body: { name: name.trim() } });
       await syncSteps().catch(() => null);
+      haptic.success();
       router.dismissTo('/(tabs)');
     } catch (e) {
       setError((e as Error).message);
@@ -27,8 +29,8 @@ export default function NewEgg() {
 
   return (
     <Screen>
-      <View style={{ alignItems: 'center' }}>
-        <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: 0 }} size={160} />
+      <View style={styles.egg}>
+        <PetView look={{ stage: 'egg', form: null, traits: null, mood: 'neutral', equipped: [], stageProgress: 0 }} size={160} onPet={() => {}} />
       </View>
       <Muted>Your grown-up pet moves to the collection. The new egg hatches after 5,000 steps, and it will look completely different.</Muted>
       <Field label="Name the new egg" value={name} onChangeText={setName} maxLength={20} autoFocus />
@@ -37,3 +39,7 @@ export default function NewEgg() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  egg: { alignItems: 'center', backgroundColor: colors.accentSoft, borderRadius: radius.xl, paddingVertical: 12 },
+});

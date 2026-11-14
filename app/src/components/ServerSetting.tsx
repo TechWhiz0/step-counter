@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { DEFAULT_API_URL, serverStore } from '@/lib/api';
-import { Button, colors, ErrorText, Field, Muted } from './ui';
+import { Button, colors, ErrorText, Field, Muted, T } from './ui';
 
 // Lets testers point the app at a different backend (a new Wi-Fi IP, or an ngrok URL) without a new build.
 export function ServerSetting() {
@@ -49,7 +49,7 @@ export function ServerSetting() {
         style={{ alignItems: 'center', paddingVertical: 6 }}
       >
         <Muted style={{ fontSize: 12 }}>Server: {server ?? '…'} (tap to change)</Muted>
-        {status && <Text style={{ fontSize: 12, color: colors.good }}>{status}</Text>}
+        {status && <T v="small" style={{ fontSize: 12, color: colors.good }}>{status}</T>}
         <ErrorText message={error} />
       </Pressable>
     );
@@ -58,10 +58,10 @@ export function ServerSetting() {
     <View style={{ gap: 8 }}>
       <Field label="Server address" value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
       <ErrorText message={error} />
-      {status && <Text style={{ color: colors.good }}>{status}</Text>}
+      {status && <T v="small" style={{ color: colors.good }}>{status}</T>}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1 }}>
-          <Button label="Test" kind="secondary" onPress={() => test(draft.trim().replace(/\/+$/, ''))} />
+          <Button label="Test" kind="ghost" onPress={() => test(draft.trim().replace(/\/+$/, ''))} />
         </View>
         <View style={{ flex: 1 }}>
           <Button label="Save" onPress={save} />
