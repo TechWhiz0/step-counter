@@ -1,17 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import type { ColorValue } from 'react-native';
-import { colors, fonts } from '@/components/ui';
+import { useEffect, useRef } from 'react';
+import { Animated, type ColorValue } from 'react-native';
+import { fonts, useColors } from '@/components/ui';
 import { haptic } from '@/lib/feel';
 import { useSession } from '@/lib/session';
 
 type IconName = keyof typeof Ionicons.glyphMap;
+
+// The selected tab's icon fills in and pops up with a little bounce.
+function TabIcon({ on, off, color, focused }: { on: IconName; off: IconName; color: ColorValue; focused: boolean }) {
+  const lift = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(lift, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 20, bounciness: 14 }).start();
+  }, [focused, lift]);
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) },
+          { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) },
+        ],
+      }}
+    >
+      <Ionicons name={focused ? on : off} color={color as string} size={24} />
+    </Animated.View>
+  );
+}
+
 const icon =
   (on: IconName, off: IconName) =>
-  ({ color, focused }: { color: ColorValue; focused: boolean }) => <Ionicons name={focused ? on : off} color={color as string} size={24} />;
+  ({ color, focused }: { color: ColorValue; focused: boolean }) => <TabIcon on={on} off={off} color={color} focused={focused} />;
 
 export default function TabsLayout() {
+  const colors = useColors();
   const { status } = useSession();
   if (status === 'signedOut') return <Redirect href="/welcome" />;
   return (

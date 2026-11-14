@@ -1,15 +1,16 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PetView } from '@/components/PetView';
-import { Button, Chip, colors, ErrorText, Field, Muted, radius, T, Title } from '@/components/ui';
+import { Button, Chip, ErrorText, Field, Muted, radius, T, Title, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { healthStatus, requestStepAccess, type HealthStatus } from '@/lib/health';
 import { setupNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 import { syncSteps } from '@/lib/sync';
+import type { Palette } from '@/lib/theme';
 import type { User } from '@/lib/types';
 
 const GOALS = [
@@ -21,6 +22,8 @@ const GOALS = [
 const HEALTH_CONNECT_STORE = 'market://details?id=com.google.android.apps.healthdata';
 
 export default function Onboarding() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { setUser } = useSession();
   const [step, setStep] = useState(0);
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -143,7 +146,8 @@ export default function Onboarding() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   scroll: { padding: 24, gap: 18, flexGrow: 1 },
   dots: { flexDirection: 'row', gap: 6, alignSelf: 'center' },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.line },

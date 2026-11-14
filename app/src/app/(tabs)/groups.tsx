@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, colors, ErrorText, Field, Muted, Pill, radius, shadow, T, Tap } from '@/components/ui';
+import { Button, Card, ErrorText, Field, Muted, Pill, radius, shadow, T, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
+import type { Palette } from '@/lib/theme';
 import type { Group } from '@/lib/types';
 
 // A stable colour per group so each one is easy to spot.
@@ -17,6 +18,8 @@ const initials = (name: string) =>
     .join('');
 
 export default function Groups() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -99,7 +102,8 @@ export default function Groups() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   scroll: { padding: 20, gap: 14, paddingBottom: 40 },
   empty: { alignItems: 'center', paddingVertical: 28, gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface, borderRadius: radius.lg, padding: 14, ...shadow },

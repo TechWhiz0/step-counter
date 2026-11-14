@@ -1,19 +1,22 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { PetArt, PetView } from '@/components/PetView';
 import { Sky } from '@/components/Sky';
-import { Button, Card, colors, ErrorText, Muted, Pill, radius, T, Tap } from '@/components/ui';
+import { Button, Card, ErrorText, Muted, Pill, radius, T, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { itemEmoji, itemLabel } from '@/lib/items';
 import { FORM_LABEL, STAGE_LABEL } from '@/lib/petText';
+import type { Palette } from '@/lib/theme';
 import type { OwnedItem, Pet } from '@/lib/types';
 
 const MAX_EQUIPPED = 3;
 const formBand = (p: Pet) => (p.form === 'sunrise' ? 'sunrise' : p.form === 'moonlight' ? 'moonlight' : 'daytime');
 
 export default function Collection() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [items, setItems] = useState<OwnedItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +142,8 @@ export default function Collection() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   scroll: { padding: 20, gap: 18, paddingBottom: 40 },
   stageCard: { padding: 0, overflow: 'hidden', gap: 0 },
   stage: { alignItems: 'center', paddingVertical: 12 },

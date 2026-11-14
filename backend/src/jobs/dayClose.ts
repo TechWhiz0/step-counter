@@ -21,3 +21,4 @@ export async function runDayClose(now = new Date()) {
 export function scheduleDayClose() {
   return cron.schedule('5 0 * * *', () => void runDayClose(), { timezone: config.timezone });
 }
+

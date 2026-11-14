@@ -1,17 +1,20 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PetView, type PetHandle } from '@/components/PetView';
 import { Sky } from '@/components/Sky';
-import { Button, colors, ErrorText, Muted, Pill, radius, T } from '@/components/ui';
+import { Button, ErrorText, Muted, Pill, radius, T, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { bandFor, haptic, SKY } from '@/lib/feel';
 import { FORM_LABEL, moodLine, STAGE_LABEL } from '@/lib/petText';
+import type { Palette } from '@/lib/theme';
 import type { Pet } from '@/lib/types';
 
 export default function FriendScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const insets = useSafeAreaInsets();
   const petRef = useRef<PetHandle>(null);
@@ -96,7 +99,8 @@ export default function FriendScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   hero: { alignItems: 'center', gap: 6, paddingBottom: 40, borderBottomLeftRadius: radius.xl + 8, borderBottomRightRadius: radius.xl + 8 },
   body: { padding: 20, gap: 14 },
   stats: { flexDirection: 'row', gap: 12 },

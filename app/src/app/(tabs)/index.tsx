@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Animated, AppState, Modal, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GoldenRadar } from '@/components/GoldenRadar';
@@ -9,7 +9,7 @@ import { PetArt, PetView } from '@/components/PetView';
 import { ShareCard } from '@/components/ShareCard';
 import { Sky } from '@/components/Sky';
 import { StepRing } from '@/components/StepRing';
-import { Button, Card, colors, ErrorText, Muted, Pill, radius, T } from '@/components/ui';
+import { Button, Card, ErrorText, Muted, Pill, radius, T, useColors } from '@/components/ui';
 import { WalkRhythm } from '@/components/WalkRhythm';
 import { api } from '@/lib/api';
 import { bandFor, haptic, SKY, useReducedMotion } from '@/lib/feel';
@@ -18,6 +18,7 @@ import { getHourlySums } from '@/lib/localDb';
 import { FORM_LABEL, growthMessage, moodLine, petReply, STAGE_LABEL } from '@/lib/petText';
 import { useSession } from '@/lib/session';
 import { cachedSync, syncSteps, takePendingSurprises } from '@/lib/sync';
+import type { Palette } from '@/lib/theme';
 import type { Pet, Stage, Surprise, SyncResult } from '@/lib/types';
 
 function greeting(hour: number) {
@@ -28,6 +29,8 @@ function greeting(hour: number) {
 }
 
 export default function Home() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const { user } = useSession();
@@ -151,7 +154,7 @@ export default function Home() {
         <Button
           label={`Share ${pet.name}`}
           kind="dark"
-          icon={<Ionicons name="share-social" size={18} color="#fff" />}
+          icon={<Ionicons name="share-social" size={18} color={colors.bg} />}
           onPress={() => setSharing(true)}
         />
       </View>
@@ -171,6 +174,8 @@ export default function Home() {
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.stat}>
       <T v="number" style={{ fontSize: 18 }}>{value}</T>
@@ -182,6 +187,8 @@ function Stat({ value, label }: { value: string; label: string }) {
 const STAGES: Stage[] = ['egg', 'baby', 'teen', 'adult'];
 
 function GrowthCard({ pet }: { pet: Pet }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const reduced = useReducedMotion();
   const fill = useRef(new Animated.Value(0)).current;
   const at = STAGES.indexOf(pet.stage);
@@ -220,6 +227,8 @@ function GrowthCard({ pet }: { pet: Pet }) {
 }
 
 function SurpriseModal({ petName, surprises, onDone }: { petName: string; surprises: Surprise[]; onDone: () => void }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   useEffect(() => {
     if (surprises.length) haptic.success();
   }, [surprises.length]);
@@ -248,6 +257,8 @@ function SurpriseModal({ petName, surprises, onDone }: { petName: string; surpri
 }
 
 function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDone: () => void }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const scale = useRef(new Animated.Value(0.2)).current;
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -277,15 +288,16 @@ function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDon
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   hero: { borderBottomLeftRadius: radius.xl + 8, borderBottomRightRadius: radius.xl + 8, paddingHorizontal: 20, paddingBottom: 64, alignItems: 'center' },
   topRow: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bubbleWrap: { alignItems: 'center', marginTop: 18, marginBottom: -6, maxWidth: 280, zIndex: 1 },
-  bubble: { backgroundColor: 'rgba(255,255,255,0.92)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.lg },
+  bubble: { backgroundColor: colors.card + 'EB', paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.lg },
   bubbleTail: {
     width: 14,
     height: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: colors.card + 'EB',
     transform: [{ rotate: '45deg' }],
     marginTop: -8,
   },

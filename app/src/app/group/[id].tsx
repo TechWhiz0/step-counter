@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Alert, Animated, Easing, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import { PetArt } from '@/components/PetView';
-import { Button, colors, ErrorText, Muted, Pill, radius, shadow, T, Tap } from '@/components/ui';
+import { Button, ErrorText, Muted, Pill, radius, shadow, T, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useReducedMotion } from '@/lib/feel';
+import type { Palette } from '@/lib/theme';
 import type { Group, LeaderboardRow } from '@/lib/types';
 
 interface Board {
@@ -25,6 +26,8 @@ const PODIUM = [
 const visit = (row: LeaderboardRow) => !row.isMe && router.push({ pathname: '/friend/[userId]', params: { userId: row.userId } });
 
 export default function GroupScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,6 +116,8 @@ export default function GroupScreen() {
 
 // Top three stand on blocks that rise in when the board loads. Tap a friend's pet to visit.
 function Podium({ rows }: { rows: LeaderboardRow[] }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const reduced = useReducedMotion();
   const rise = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   useEffect(() => {
@@ -148,7 +153,8 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.lg, backgroundColor: colors.surface, ...shadow },
   rowMe: { backgroundColor: colors.accentSoft },
   rank: { width: 28, textAlign: 'center', fontSize: 17, color: colors.muted },

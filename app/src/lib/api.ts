@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { DEMO_TOKEN, demoApi } from './demo';
 
 // Set EXPO_PUBLIC_API_URL in app/.env to your computer's address (e.g. http://192.168.1.20:4000 for a real phone).
 // Defaults: the Android emulator reaches your computer at 10.0.2.2, the iOS simulator at localhost.
@@ -44,6 +45,9 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   const [token, server] = await Promise.all([tokenStore.get(), serverStore.get()]);
+  if (__DEV__ && token === DEMO_TOKEN) {
+    return demoApi(path, options.method ?? (options.body ? 'POST' : 'GET'), options.body) as Promise<T>;
+  }
   let res: Response;
   try {
     res = await fetch(`${server}${path}`, {

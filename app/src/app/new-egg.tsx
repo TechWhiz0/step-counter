@@ -1,13 +1,16 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { PetView } from '@/components/PetView';
-import { Button, colors, ErrorText, Field, Muted, radius, Screen } from '@/components/ui';
+import { Button, ErrorText, Field, Muted, radius, Screen, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
+import type { Palette } from '@/lib/theme';
 import { syncSteps } from '@/lib/sync';
 
 export default function NewEgg() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export default function NewEgg() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   egg: { alignItems: 'center', backgroundColor: colors.accentSoft, borderRadius: radius.xl, paddingVertical: 12 },
 });

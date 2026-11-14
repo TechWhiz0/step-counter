@@ -1,10 +1,14 @@
+import { useMemo } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PetView } from '@/components/PetView';
 import { ServerSetting } from '@/components/ServerSetting';
 import { Sky } from '@/components/Sky';
-import { Button, colors, radius, T } from '@/components/ui';
+import { Button, radius, T, useColors } from '@/components/ui';
+import { DEMO_TOKEN, demoUser } from '@/lib/demo';
+import { useSession } from '@/lib/session';
+import type { Palette } from '@/lib/theme';
 
 const POINTS = [
   { icon: '🥚', text: 'Hatches after your first 5,000 steps' },
@@ -13,7 +17,10 @@ const POINTS = [
 ];
 
 export default function Welcome() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { signIn } = useSession();
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Sky style={[styles.sky, { paddingTop: insets.top + 24 }]}>
@@ -37,6 +44,16 @@ export default function Welcome() {
         <View style={{ gap: 10 }}>
           <Button label="Get started" onPress={() => router.push('/register')} />
           <Button label="I already have an account" kind="ghost" onPress={() => router.push('/login')} />
+          {__DEV__ && (
+            <Button
+              label="Try the demo (no server)"
+              kind="secondary"
+              onPress={async () => {
+                await signIn(DEMO_TOKEN, demoUser);
+                router.replace('/(tabs)');
+              }}
+            />
+          )}
           <ServerSetting />
         </View>
       </View>
@@ -44,7 +61,8 @@ export default function Welcome() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   sky: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
   sheet: {
     backgroundColor: colors.bg,

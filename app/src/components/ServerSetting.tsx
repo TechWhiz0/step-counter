@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { DEFAULT_API_URL, serverStore } from '@/lib/api';
-import { Button, colors, ErrorText, Field, Muted, T } from './ui';
+import { Button, ErrorText, Field, Muted, T, useColors } from './ui';
 
 // Lets testers point the app at a different backend (a new Wi-Fi IP, or an ngrok URL) without a new build.
 export function ServerSetting() {
+  const colors = useColors();
   const [server, setServer] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');

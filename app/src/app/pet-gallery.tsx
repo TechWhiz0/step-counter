@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { PetArt, type PetLook } from '@/components/PetView';
-import { colors } from '@/components/ui';
+import { Text, useColors } from '@/components/ui';
 import type { Traits } from '@/lib/types';
 
 // Dev-only gallery of pet looks, for checking the renderer without walking. Not reachable in release builds.
@@ -27,11 +27,12 @@ const looks: (PetLook & { label: string })[] = [
 ];
 
 export default function PetGallery() {
+  const colors = useColors();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, padding: 16 }}>
       {looks.map((l) => (
-        <View key={l.label} style={{ alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 8 }}>
+        <View key={l.label} style={{ alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 8 }}>
           <PetArt look={l} size={160} />
           <Text style={{ color: colors.ink, fontWeight: '700' }}>{l.label}</Text>
         </View>

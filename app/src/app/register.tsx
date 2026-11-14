@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { Button, colors, ErrorText, Field, Muted, Screen, T } from '@/components/ui';
+import { EggHeader, MeadowBackdrop } from '@/components/Doodles';
+import { Button, ErrorText, Field, Muted, Screen, T, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { useSession } from '@/lib/session';
 import type { User } from '@/lib/types';
 
 export default function Register() {
+  const colors = useColors();
   const { signIn } = useSession();
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
@@ -36,10 +38,13 @@ export default function Register() {
   const strength = Math.min(4, Math.floor(password.length / 3));
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <MeadowBackdrop height={110} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <Screen>
-          <Muted>Takes a minute. Then you get your egg.</Muted>
+        <Screen style={{ backgroundColor: 'transparent' }}>
+          <EggHeader />
+          <Muted style={{ textAlign: 'center' }}>Takes a minute. Then you get your egg.</Muted>
           <Field label="Nickname" hint="Shown on group leaderboards" value={nickname} onChangeText={setNickname} maxLength={24} autoCapitalize="words" />
           <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
           <View style={{ gap: 8 }}>
@@ -64,6 +69,7 @@ export default function Register() {
           <Muted style={{ textAlign: 'center' }}>We only ever read your step count. No location, no heart rate.</Muted>
         </Screen>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }

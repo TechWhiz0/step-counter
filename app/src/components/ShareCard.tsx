@@ -1,15 +1,18 @@
 import * as Sharing from 'expo-sharing';
-import { useRef, useState, type ComponentRef } from 'react';
+import { useRef, useState, type ComponentRef, useMemo } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { FORM_LABEL, STAGE_LABEL } from '@/lib/petText';
 import type { Pet } from '@/lib/types';
 import { PetArt } from './PetView';
 import { Sky } from './Sky';
-import { Button, colors, fonts, radius, T } from './ui';
+import type { Palette } from '@/lib/theme';
+import { Button, fonts, radius, T, useColors } from './ui';
 
 // A card of the pet and this week's steps, shared as an image.
 export function ShareCard({ pet, weekSteps, streak, visible, onClose }: { pet: Pet; weekSteps: number; streak: number; visible: boolean; onClose: () => void }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const ref = useRef<ComponentRef<typeof View>>(null);
   const [busy, setBusy] = useState(false);
 
@@ -59,7 +62,8 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(20,16,12,0.6)', justifyContent: 'center', padding: 24, gap: 12 },
   card: { backgroundColor: colors.surface, borderRadius: radius.xl, overflow: 'hidden' },
   sky: { alignItems: 'center' },

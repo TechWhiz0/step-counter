@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { ServerSetting } from '@/components/ServerSetting';
-import { Button, Card, colors, ErrorText, Field, Muted, radius, T, Tap } from '@/components/ui';
+import { Button, Card, ErrorText, Field, Muted, radius, T, Tap, ThemePicker, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { openHealthSettings } from '@/lib/health';
 import { useSession } from '@/lib/session';
+import type { Palette } from '@/lib/theme';
 import type { User } from '@/lib/types';
 
 const GOAL_STEP = 500;
@@ -14,6 +15,8 @@ const GOAL_MIN = 1000;
 const GOAL_MAX = 50000;
 
 export default function Settings() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, setUser, signOut } = useSession();
   const [nickname, setNickname] = useState(user?.nickname ?? '');
   const [goal, setGoal] = useState(user?.dailyGoal ?? 6000);
@@ -88,6 +91,11 @@ export default function Settings() {
       </Card>
 
       <Card style={{ gap: 12 }}>
+        <T v="h3">Appearance</T>
+        <ThemePicker />
+      </Card>
+
+      <Card style={{ gap: 12 }}>
         <View style={styles.headRow}>
           <View style={styles.icon}>
             <Ionicons name="shield-checkmark" size={18} color={colors.good} />
@@ -109,7 +117,8 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   scroll: { padding: 20, gap: 14, paddingBottom: 40 },
   stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: radius.lg, padding: 8 },
   stepBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },

@@ -1,76 +1,85 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
-  Text,
+  Text as RNText,
   TextInput,
   View,
   type PressableProps,
   type StyleProp,
   type TextInputProps,
+  type TextProps,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import { haptic } from '@/lib/feel';
+import { tapFeedback } from '@/lib/haptics';
+import { useColors, useTheme, type Palette, type ThemeMode } from '@/lib/theme';
 
-export const colors = {
-  bg: '#FBF5EC',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F4ECE1',
-  ink: '#1E1A16',
-  muted: '#7B7166',
-  faint: '#B4AA9F',
-  line: '#EDE3D6',
-  accent: '#FF7A30',
-  accentDeep: '#E2601A',
-  accentSoft: '#FFE8D8',
-  good: '#1F9D63',
-  goodSoft: '#DDF3E7',
-  gold: '#F2B000',
-  goldSoft: '#FFF1C7',
-  danger: '#D2423A',
-  dangerSoft: '#FCE6E4',
-  night: '#14203A',
-  // Older names kept for screens that still use them.
-  card: '#FFFFFF',
-  border: '#EDE3D6',
-};
+export { useColors, useTheme };
 
+// Loaded once in app/_layout.tsx.
 export const fonts = {
-  display: 'Fredoka_600SemiBold',
-  displayBold: 'Fredoka_700Bold',
+  display: 'Baloo2_800ExtraBold',
+  displaySoft: 'Baloo2_700Bold',
+  displayBold: 'Baloo2_800ExtraBold',
   body: 'Nunito_400Regular',
   bodySemi: 'Nunito_600SemiBold',
   bodyBold: 'Nunito_700Bold',
+  bodyHeavy: 'Nunito_800ExtraBold',
   bodyBlack: 'Nunito_800ExtraBold',
 };
 
 export const radius = { sm: 12, md: 16, lg: 24, xl: 32, pill: 999 };
 
 export const shadow: ViewStyle = {
-  shadowColor: '#7A4A1E',
+  shadowColor: '#1E5A32',
   shadowOpacity: 0.08,
   shadowRadius: 18,
   shadowOffset: { width: 0, height: 8 },
   elevation: 3,
 };
 
+// Custom fonts on Android ignore fontWeight, so pick the family from the weight instead.
+// Big heavy text (titles, step counts) gets the rounded Baloo display face; everything else is Nunito.
+function familyFor(style: TextStyle): string | undefined {
+  if (style.fontFamily) return style.fontFamily;
+  if (style.fontWeight === undefined && style.fontSize === undefined) return undefined; // inherit from parent Text
+  const w = style.fontWeight === 'bold' ? 700 : Number(style.fontWeight ?? 400);
+  const size = style.fontSize ?? 14;
+  if (w >= 800 && size >= 20) return fonts.display;
+  if (w >= 800) return fonts.bodyHeavy;
+  if (w >= 700) return fonts.bodyBold;
+  if (w >= 600) return fonts.bodySemi;
+  return fonts.body;
+}
+
+export function Text({ style, ...rest }: TextProps) {
+  const flat = (StyleSheet.flatten(style) ?? {}) as TextStyle;
+  const fontFamily = familyFor(flat);
+  if (!fontFamily || flat.fontFamily) return <RNText {...rest} style={style} />;
+  const display = fontFamily === fonts.display;
+  return <RNText {...rest} style={[style, { fontFamily, fontWeight: 'normal' }, display && { includeFontPadding: false }]} />;
+}
+
 type Variant = 'hero' | 'title' | 'h2' | 'h3' | 'body' | 'bodyStrong' | 'small' | 'label' | 'number';
 
 const VARIANTS: Record<Variant, TextStyle> = {
-  hero: { fontFamily: fonts.displayBold, fontSize: 40, lineHeight: 44, color: colors.ink, letterSpacing: -0.5 },
-  title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: colors.ink, letterSpacing: -0.3 },
-  h2: { fontFamily: fonts.display, fontSize: 20, lineHeight: 26, color: colors.ink },
-  h3: { fontFamily: fonts.bodyBlack, fontSize: 16, lineHeight: 22, color: colors.ink },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23, color: colors.ink },
-  bodyStrong: { fontFamily: fonts.bodyBold, fontSize: 16, lineHeight: 23, color: colors.ink },
-  small: { fontFamily: fonts.bodySemi, fontSize: 14, lineHeight: 20, color: colors.muted },
-  label: { fontFamily: fonts.bodyBlack, fontSize: 12, lineHeight: 16, color: colors.muted, letterSpacing: 0.8, textTransform: 'uppercase' },
-  number: { fontFamily: fonts.displayBold, fontSize: 22, lineHeight: 26, color: colors.ink, fontVariant: ['tabular-nums'] },
+  hero: { fontFamily: fonts.display, fontSize: 40, lineHeight: 46, letterSpacing: -0.5, includeFontPadding: false },
+  title: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, letterSpacing: -0.3, includeFontPadding: false },
+  h2: { fontFamily: fonts.displaySoft, fontSize: 20, lineHeight: 26, includeFontPadding: false },
+  h3: { fontFamily: fonts.bodyHeavy, fontSize: 16, lineHeight: 22 },
+  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23 },
+  bodyStrong: { fontFamily: fonts.bodyBold, fontSize: 16, lineHeight: 23 },
+  small: { fontFamily: fonts.bodySemi, fontSize: 14, lineHeight: 20 },
+  label: { fontFamily: fonts.bodyHeavy, fontSize: 12, lineHeight: 16, letterSpacing: 0.8, textTransform: 'uppercase' },
+  number: { fontFamily: fonts.display, fontSize: 22, lineHeight: 28, fontVariant: ['tabular-nums'], includeFontPadding: false },
 };
 
+// Typography with the theme's ink; small and label text use the muted tone.
 export function T({
   children,
   v = 'body',
@@ -82,10 +91,12 @@ export function T({
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
 }) {
+  const c = useColors();
+  const color = v === 'small' || v === 'label' ? c.muted : c.ink;
   return (
-    <Text style={[VARIANTS[v], style]} numberOfLines={numberOfLines}>
+    <RNText style={[VARIANTS[v], { color }, style]} numberOfLines={numberOfLines}>
       {children}
-    </Text>
+    </RNText>
   );
 }
 
@@ -123,21 +134,46 @@ export function Tap({
 }
 
 export function Screen({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.screen, style]}>{children}</View>;
+  const c = useColors();
+  return <View style={[styles.screen, { backgroundColor: c.bg }, style]}>{children}</View>;
 }
 
+// White card sitting on a soft flat edge, like a chunky toy tile.
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  const c = useColors();
+  return (
+    <View>
+      <View style={[StyleSheet.absoluteFill, styles.cardEdge, { backgroundColor: c.shadow }]} />
+      <View style={[styles.card, { backgroundColor: c.card }, style]}>{children}</View>
+    </View>
+  );
 }
 
 export function Title({ children }: { children: ReactNode }) {
-  return <T v="title">{children}</T>;
+  const c = useColors();
+  return <RNText style={[styles.title, { color: c.ink }]}>{children}</RNText>;
 }
 
 export function Muted({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
-  return <T v="small" style={style}>{children}</T>;
+  const c = useColors();
+  return <Text style={[styles.muted, { color: c.muted }, style]}>{children}</Text>;
 }
 
+const EDGE = 5;
+
+type ButtonKind = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dark';
+
+function buttonLook(c: Palette, kind: ButtonKind) {
+  return {
+    primary: { face: c.accent, edge: c.accentDeep, text: c.onAccent, border: c.accent },
+    secondary: { face: c.card, edge: c.line, text: c.accentText, border: c.line },
+    ghost: { face: c.surfaceAlt, edge: c.border, text: c.ink, border: c.surfaceAlt },
+    danger: { face: c.dangerSoft, edge: c.dangerEdge, text: c.danger, border: c.dangerSoft },
+    dark: { face: c.ink, edge: c.night, text: c.bg, border: c.ink },
+  }[kind];
+}
+
+// A 3D button: the face sits on a darker edge and squishes down onto it when pressed, then springs back.
 export function Button({
   label,
   onPress,
@@ -148,43 +184,55 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  kind?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'dark';
+  kind?: ButtonKind;
   busy?: boolean;
   disabled?: boolean;
   icon?: ReactNode;
 }) {
-  const off = disabled || busy;
-  const tone = BUTTON_TONES[kind];
+  const c = useColors();
+  const off = !!(disabled || busy);
+  const press = useRef(new Animated.Value(0)).current;
+  const spring = (toValue: number) =>
+    Animated.spring(press, { toValue, useNativeDriver: true, speed: 40, bounciness: toValue ? 0 : 14 }).start();
+  const look = buttonLook(c, kind);
+
   return (
-    <Tap
+    <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: !!off, busy: !!busy }}
-      onPress={onPress}
+      accessibilityState={{ disabled: off, busy: !!busy }}
       disabled={off}
-      style={[styles.button, { backgroundColor: tone.bg }, kind === 'primary' && styles.buttonLift, off && { opacity: 0.45 }]}
+      onPress={onPress}
+      onPressIn={() => {
+        spring(1);
+        tapFeedback();
+      }}
+      onPressOut={() => spring(0)}
+      style={{ paddingBottom: EDGE }}
     >
-      {busy ? (
-        <ActivityIndicator color={tone.fg} />
-      ) : (
-        <View style={styles.buttonRow}>
-          {icon}
-          <Text style={[styles.buttonText, { color: tone.fg }]}>{label}</Text>
-        </View>
-      )}
-    </Tap>
+      <View style={[styles.buttonEdge, { backgroundColor: off ? c.border : look.edge }]} />
+      <Animated.View
+        style={[
+          styles.button,
+          { backgroundColor: off ? c.disabledFace : look.face, borderColor: off ? c.border : look.border },
+          { transform: [{ translateY: press.interpolate({ inputRange: [-1, 0, 1], outputRange: [-EDGE, 0, EDGE] }) }] },
+        ]}
+      >
+        {busy ? (
+          <ActivityIndicator color={look.text} />
+        ) : (
+          <View style={styles.buttonRow}>
+            {icon}
+            <RNText style={[styles.buttonText, { color: off ? c.muted : look.text }]}>{label}</RNText>
+          </View>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 
-const BUTTON_TONES = {
-  primary: { bg: colors.accent, fg: '#FFFFFF' },
-  secondary: { bg: colors.accentSoft, fg: colors.accentDeep },
-  ghost: { bg: colors.surfaceAlt, fg: colors.ink },
-  danger: { bg: colors.dangerSoft, fg: colors.danger },
-  dark: { bg: colors.ink, fg: '#FFFFFF' },
-};
-
 // A selectable pill, for goal pickers and the wardrobe.
 export function Chip({ label, on, onPress, disabled }: { label: string; on: boolean; onPress: () => void; disabled?: boolean }) {
+  const c = useColors();
   return (
     <Tap
       onPress={onPress}
@@ -192,21 +240,23 @@ export function Chip({ label, on, onPress, disabled }: { label: string; on: bool
       feedback="select"
       accessibilityRole="button"
       accessibilityState={{ selected: on, disabled }}
-      style={[styles.chip, on && styles.chipOn, disabled && { opacity: 0.45 }]}
+      style={[styles.chip, { backgroundColor: on ? c.accent : c.surfaceAlt }, disabled && { opacity: 0.45 }]}
     >
-      <Text style={[styles.chipText, on && { color: '#fff' }]}>{label}</Text>
+      <RNText style={[styles.chipText, { color: on ? c.onAccent : c.ink }]}>{label}</RNText>
     </Tap>
   );
 }
 
 export function Field(props: TextInputProps & { label: string; hint?: string }) {
+  const c = useColors();
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ gap: 8 }}>
-      <T v="label">{props.label}</T>
+    <View style={{ gap: 6 }}>
+      <RNText style={[styles.label, { color: c.ink }]}>{props.label}</RNText>
       <TextInput
-        placeholderTextColor={colors.faint}
-        selectionColor={colors.accent}
+        placeholderTextColor={c.muted}
+        selectionColor={c.accent}
+        cursorColor={c.accent}
         {...props}
         onFocus={(e) => {
           setFocused(true);
@@ -216,7 +266,11 @@ export function Field(props: TextInputProps & { label: string; hint?: string }) 
           setFocused(false);
           props.onBlur?.(e);
         }}
-        style={[styles.input, focused && styles.inputFocused, props.style]}
+        style={[
+          styles.input,
+          { backgroundColor: c.card, color: c.ink, borderColor: focused ? c.accent : c.inputBorder },
+          props.style,
+        ]}
       />
       {props.hint ? <T v="small" style={{ fontSize: 13 }}>{props.hint}</T> : null}
     </View>
@@ -224,54 +278,100 @@ export function Field(props: TextInputProps & { label: string; hint?: string }) 
 }
 
 export function ErrorText({ message }: { message: string | null }) {
-  return message ? (
-    <View style={styles.error}>
-      <Text style={styles.errorText}>{message}</Text>
-    </View>
-  ) : null;
+  const c = useColors();
+  return message ? <RNText style={[styles.error, { color: c.danger }]}>{message}</RNText> : null;
 }
 
 // A small rounded label, e.g. a stage name or a streak.
 export function Pill({ children, tone = 'soft', style }: { children: ReactNode; tone?: 'soft' | 'glass' | 'gold' | 'good'; style?: StyleProp<ViewStyle> }) {
-  const t = PILL_TONES[tone];
+  const c = useColors();
+  const t = {
+    soft: { bg: c.accentSoft, fg: c.accentText },
+    glass: { bg: c.card + 'B8', fg: c.ink },
+    gold: { bg: c.goldSoft, fg: c.goldText },
+    good: { bg: c.goodSoft, fg: c.good },
+  }[tone];
   return (
     <View style={[styles.pill, { backgroundColor: t.bg }, style]}>
-      <Text style={[styles.pillText, { color: t.fg }]}>{children}</Text>
+      <RNText style={[styles.pillText, { color: t.fg }]}>{children}</RNText>
     </View>
   );
 }
 
-const PILL_TONES = {
-  soft: { bg: colors.accentSoft, fg: colors.accentDeep },
-  glass: { bg: 'rgba(255,255,255,0.72)', fg: colors.ink },
-  gold: { bg: colors.goldSoft, fg: '#8A6300' },
-  good: { bg: colors.goodSoft, fg: colors.good },
-};
+const MODES: { mode: ThemeMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { mode: 'light', label: 'Light', icon: 'sunny' },
+  { mode: 'dark', label: 'Dark', icon: 'moon' },
+  { mode: 'system', label: 'System', icon: 'phone-portrait-outline' },
+];
+
+// Light / Dark / System switch with a pill that slides to the chosen option.
+export function ThemePicker() {
+  const c = useColors();
+  const { mode, setMode } = useTheme();
+  const [width, setWidth] = useState(0);
+  const index = MODES.findIndex((m) => m.mode === mode);
+  const x = useRef(new Animated.Value(index)).current;
+
+  useEffect(() => {
+    Animated.spring(x, { toValue: index, useNativeDriver: true, speed: 18, bounciness: 10 }).start();
+  }, [index, x]);
+
+  const slot = width / MODES.length;
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width - 8)}
+      style={[styles.segment, { backgroundColor: c.accentSoft }]}
+    >
+      {width > 0 && (
+        <Animated.View
+          style={[
+            styles.segmentPill,
+            { width: slot, backgroundColor: c.card, transform: [{ translateX: Animated.multiply(x, slot) }] },
+          ]}
+        />
+      )}
+      {MODES.map((m) => {
+        const on = m.mode === mode;
+        return (
+          <Pressable
+            key={m.mode}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            onPress={() => {
+              tapFeedback();
+              setMode(m.mode);
+            }}
+            style={styles.segmentItem}
+          >
+            <Ionicons name={m.icon} size={16} color={on ? c.accent : c.muted} />
+            <RNText style={[styles.segmentText, { color: on ? c.ink : c.muted }]}>{m.label}</RNText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 20, gap: 18 },
-  card: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 18, gap: 10, ...shadow },
-  button: { minHeight: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22 },
-  buttonLift: { shadowColor: colors.accentDeep, shadowOpacity: 0.3, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  screen: { flex: 1, padding: 22, gap: 18 },
+  card: { borderRadius: 22, padding: 18, gap: 8 },
+  cardEdge: { borderRadius: 22, top: 4, bottom: -4 },
+  title: { fontFamily: fonts.display, fontSize: 28, includeFontPadding: false },
+  muted: { fontFamily: fonts.body, fontSize: 15, lineHeight: 22 },
+  buttonEdge: { position: 'absolute', left: 0, right: 0, top: EDGE, bottom: 0, borderRadius: 999 },
+  button: { paddingVertical: 14, alignItems: 'center', borderRadius: 999, borderWidth: 2 },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  buttonText: { fontFamily: fonts.bodyBlack, fontSize: 16, letterSpacing: 0.2 },
-  chip: { paddingVertical: 11, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
-  chipOn: { backgroundColor: colors.ink },
-  chipText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.ink },
-  input: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontFamily: fonts.bodySemi,
-    color: colors.ink,
-  },
-  inputFocused: { borderColor: colors.accent, backgroundColor: colors.surface },
-  error: { backgroundColor: colors.dangerSoft, borderRadius: radius.sm, padding: 12 },
-  errorText: { color: colors.danger, fontSize: 14, fontFamily: fonts.bodySemi, lineHeight: 20 },
+  buttonText: { fontFamily: fonts.bodyHeavy, fontSize: 17, letterSpacing: 0.2 },
+  chip: { paddingVertical: 11, paddingHorizontal: 16, borderRadius: radius.pill },
+  chipText: { fontFamily: fonts.bodyBold, fontSize: 15 },
+  label: { fontFamily: fonts.bodyBold, fontSize: 14 },
+  input: { borderWidth: 2, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16, fontFamily: fonts.bodySemi },
+  error: { fontFamily: fonts.bodyBold, fontSize: 14 },
   pill: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill },
-  pillText: { fontFamily: fonts.bodyBlack, fontSize: 13 },
+  pillText: { fontFamily: fonts.bodyHeavy, fontSize: 13 },
+  segment: { flexDirection: 'row', borderRadius: 999, padding: 4 },
+  segmentPill: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 999 },
+  segmentItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
+  segmentText: { fontFamily: fonts.bodyBold, fontSize: 14 },
 });

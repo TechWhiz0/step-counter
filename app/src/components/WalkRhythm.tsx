@@ -3,7 +3,7 @@ import { Animated, Easing, PanResponder, StyleSheet, View } from 'react-native';
 import { bandFor, haptic, useReducedMotion, type Band } from '@/lib/feel';
 import { FORM_LABEL } from '@/lib/petText';
 import type { Form } from '@/lib/types';
-import { Card, colors, fonts, radius, T } from './ui';
+import { Card, fonts, radius, T, useColors } from './ui';
 
 const BAND_COLOR: Record<Band, string> = { sunrise: '#FF9A52', daytime: '#38B2E3', moonlight: '#35568A' };
 const BAND_NAME: Record<Band, string> = { sunrise: 'Sunrise', daytime: 'Daytime', moonlight: 'Moonlight' };
@@ -15,6 +15,7 @@ const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'am' 
 // Today's steps hour by hour, coloured by the time band that shapes the adult form.
 // Drag across the bars to read any hour. Below: which form the last week of walks points to.
 export function WalkRhythm({ hourly, weekSums, form, petName }: { hourly: number[]; weekSums: number[]; form: Form | null; petName: string }) {
+  const c = useColors();
   const [picked, setPicked] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
   const grow = useRef(new Animated.Value(0)).current;
@@ -111,10 +112,10 @@ export function WalkRhythm({ hourly, weekSums, form, petName }: { hourly: number
                   styles.bar,
                   {
                     height: grow.interpolate({ inputRange: [0, 1], outputRange: [4, height] }),
-                    backgroundColor: h ? BAND_COLOR[band] : colors.surfaceAlt,
+                    backgroundColor: h ? BAND_COLOR[band] : c.surfaceAlt,
                     opacity: dim ? 0.35 : i > now ? 0.4 : 1,
                   },
-                  i === now && styles.barNow,
+                  i === now && [styles.barNow, { borderColor: c.ink }],
                 ]}
               />
             </View>
@@ -123,7 +124,7 @@ export function WalkRhythm({ hourly, weekSums, form, petName }: { hourly: number
       </View>
       <View style={styles.axis}>
         {['12a', '6a', '12p', '6p', '12a'].map((l, i) => (
-          <T key={i} v="small" style={styles.axisText}>{l}</T>
+          <T key={i} v="small" style={[styles.axisText, { color: c.faint }]}>{l}</T>
         ))}
       </View>
 
@@ -166,9 +167,9 @@ const styles = StyleSheet.create({
   bars: { height: BAR_AREA, flexDirection: 'row', alignItems: 'flex-end' },
   barSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' },
   bar: { width: '64%', borderRadius: 4 },
-  barNow: { borderWidth: 1.5, borderColor: colors.ink },
+  barNow: { borderWidth: 1.5 },
   axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -6 },
-  axisText: { fontSize: 11, fontFamily: fonts.bodyBold, color: colors.faint },
+  axisText: { fontSize: 11, fontFamily: fonts.bodyBold },
   compass: { height: 10, borderRadius: radius.pill, overflow: 'hidden', flexDirection: 'row', gap: 2 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
