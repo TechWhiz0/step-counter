@@ -156,3 +156,14 @@ test('daily goal can change but the nickname is fixed after sign-up', async () =
   const me = await request(app).get('/auth/me').set(auth(token));
   assert.equal(me.body.user.nickname, 'Fixed');
 });
+
+test('a sync that reads fewer steps never lowers what the server already has', async () => {
+  const { token } = await signUp('nolower@example.com', 'NoLower');
+  await request(app).post('/pet').set(auth(token)).send({ name: 'Keep' });
+  const day = dayKey(new Date(), 'Asia/Kolkata');
+  await request(app).post('/steps/sync').set(auth(token)).send({ days: [{ day, hourly: hours({ 8: 3000, 9: 1000 }) }] });
+  // A later read that lost the morning (e.g. permissions glitch) but has new evening steps.
+  const res = await request(app).post('/steps/sync').set(auth(token)).send({ days: [{ day, hourly: hours({ 18: 500 }) }] });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.today.total, 4500);
+});

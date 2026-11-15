@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, LeagueBadge, leagueName } from '@/components/icons';
 import { MonsterIcon, monsterTint } from '@/components/monsters';
 import { PetArt } from '@/components/PetView';
-import { ServerSetting } from '@/components/ServerSetting';
 import { Button, compact, ErrorText, fonts, T, Tap, useColors } from '@/components/ui';
 import { WeekBars } from '@/components/WeekBars';
 import { api } from '@/lib/api';
@@ -253,7 +252,6 @@ export default function Me() {
         </Tap>
       )}
 
-      <ServerSetting />
       <Button label="Log out" kind="ghost" onPress={signOut} />
       <Text style={[styles.foot, { color: c.muted }]}>Signed in as {user?.email}</Text>
     </ScrollView>

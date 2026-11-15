@@ -17,8 +17,11 @@ export function syncSteps(): Promise<SyncResult | null> {
       if (await hasStepAccess()) {
         const days = await readHourlySteps(SYNC_DAYS);
         await saveStepDays(days);
-        const result = await api<SyncResult>('/steps/sync', { body: { days } });
-        await markSynced(days.map((d) => d.day));
+        // Days the phone reads as completely empty are left out, so a phone with missing history
+        // (new phone, cleared health data) can't wipe steps the server already has.
+        const withSteps = days.filter((d) => d.hourly.some((h) => h > 0));
+        const result = await api<SyncResult>('/steps/sync', { body: { days: withSteps } });
+        await markSynced(withSteps.map((d) => d.day));
         await afterSync(result);
         return result;
       }

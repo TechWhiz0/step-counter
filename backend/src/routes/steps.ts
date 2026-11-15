@@ -39,10 +39,14 @@ stepsRouter.post('/sync', async (req, res) => {
 
   for (const d of days) {
     if (d.day > today || d.day < oldest) continue;
-    const total = d.hourly.reduce((a, b) => a + b, 0);
+    // Keep the higher count for each hour: a phone that briefly reads 0 (permissions, a reset health store,
+    // a new phone) must never erase steps the server already has.
+    const existing = await StepDay.findOne({ userId: user._id, day: d.day }).select('hourly').lean();
+    const hourly = d.hourly.map((h, i) => Math.max(h, existing?.hourly?.[i] ?? 0));
+    const total = hourly.reduce((a, b) => a + b, 0);
     await StepDay.updateOne(
       { userId: user._id, day: d.day },
-      { $set: { hourly: d.hourly, total, cappedTotal: cappedTotal(d.hourly) } },
+      { $set: { hourly, total, cappedTotal: cappedTotal(hourly) } },
       { upsert: true },
     );
   }

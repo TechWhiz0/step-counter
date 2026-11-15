@@ -3,7 +3,6 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
 import { MonsterIcon } from '@/components/monsters';
-import { ServerSetting } from '@/components/ServerSetting';
 import { Button, fonts, IconTile, useColors } from '@/components/ui';
 
 export default function Welcome() {
@@ -45,7 +44,6 @@ export default function Welcome() {
       <View style={{ gap: 12 }}>
         <Button label="Start walking" onPress={() => router.push('/register')} />
         <Button label="I have an account" kind="secondary" onPress={() => router.push('/login')} />
-        <ServerSetting />
       </View>
     </ScrollView>
   );

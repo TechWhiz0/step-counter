@@ -2,14 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { DEMO_TOKEN, demoApi } from './demo';
 
-// Set EXPO_PUBLIC_API_URL in app/.env to your computer's address (e.g. http://192.168.1.20:4000 for a real phone).
-// Defaults: the Android emulator reaches your computer at 10.0.2.2, the iOS simulator at localhost.
-// Users can override it from the welcome screen, so a changed IP doesn't need a new build.
-export const DEFAULT_API_URL =
+// The server comes from EXPO_PUBLIC_API_URL in app/.env (built into the app; restart Metro after changing it).
+// Without it: the Android emulator reaches your computer at 10.0.2.2, the iOS simulator at localhost.
+export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ?? (Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000');
 
 const TOKEN_KEY = 'steppet.token';
-const SERVER_KEY = 'steppet.server';
+// Older builds let users save their own server address here; it's cleared so .env always wins.
+const OLD_SERVER_KEY = 'steppet.server';
 
 // SecureStore has no web version; web is only used for dev previews.
 const store =
@@ -31,11 +31,7 @@ export const tokenStore = {
   clear: () => store.clear(TOKEN_KEY),
 };
 
-export const serverStore = {
-  get: async () => (await store.get(SERVER_KEY)) ?? DEFAULT_API_URL,
-  set: (url: string) => store.set(SERVER_KEY, url.trim().replace(/\/+$/, '')),
-  reset: () => store.clear(SERVER_KEY),
-};
+void store.clear(OLD_SERVER_KEY).catch(() => {});
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -44,7 +40,8 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const [token, server] = await Promise.all([tokenStore.get(), serverStore.get()]);
+  const token = await tokenStore.get();
+  const server = API_URL;
   if (__DEV__ && token === DEMO_TOKEN) {
     return demoApi(path, options.method ?? (options.body ? 'POST' : 'GET'), options.body) as Promise<T>;
   }
@@ -61,7 +58,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch {
-    throw new ApiError(0, `Can't reach the server at ${server}. Check the server address and that your phone is on the same network.`);
+    throw new ApiError(0, "Can't reach Step Pet right now. Check your internet connection and try again in a moment.");
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));

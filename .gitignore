@@ -3,5 +3,6 @@
 skills-lock.json
 /backend/scripts
 /backend/test
+/app/.env
 
 
