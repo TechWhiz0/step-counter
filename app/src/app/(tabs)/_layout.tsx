@@ -54,11 +54,13 @@ function TabButton({ name, focused, onPress }: { name: string; focused: boolean;
 export default function TabsLayout() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { status } = useSession();
+  const { status, user } = useSession();
   if (status === 'signedOut') return <Redirect href="/welcome" />;
+  if (user?.role === 'admin') return <Redirect href="/admin" />;
   return (
     <Tabs
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg } }}
+      // Tabs cross-fade instead of snapping.
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg }, animation: 'fade' }}
       tabBar={({ state, navigateToTab }) => (
         <View style={[styles.bar, { backgroundColor: c.tabBg, borderTopColor: c.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
           {state.routes.map((route, i) => {

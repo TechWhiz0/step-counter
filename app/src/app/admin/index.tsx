@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { AdminPage, BackButton, Segmented, SquareButton } from '@/components/admin/AdminChrome';
+import { AdminPage, LogoutButton, Segmented, SquareButton } from '@/components/admin/AdminChrome';
 import { Icon } from '@/components/icons';
 import { MonsterIcon } from '@/components/monsters';
 import { Card, CardHeader, compact, ErrorText, fonts, Tap, useColors } from '@/components/ui';
@@ -67,7 +67,7 @@ export default function AdminOverviewScreen() {
   return (
     <AdminPage active="overview" reviewCount={data?.needsReview}>
       <View style={styles.header}>
-        <BackButton />
+        <LogoutButton />
         <MonsterIcon species="mochi" size={40} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.kicker, { color: c.muted }]}>Step Pet admin</Text>

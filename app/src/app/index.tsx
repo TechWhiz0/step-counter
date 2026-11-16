@@ -5,7 +5,7 @@ import { useSession } from '@/lib/session';
 
 export default function Index() {
   const colors = useColors();
-  const { status } = useSession();
+  const { status, user } = useSession();
   if (status === 'loading') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
@@ -13,5 +13,7 @@ export default function Index() {
       </View>
     );
   }
-  return <Redirect href={status === 'signedIn' ? '/(tabs)' : '/welcome'} />;
+  if (status !== 'signedIn') return <Redirect href="/welcome" />;
+  // Admin accounts only ever see the admin screens.
+  return <Redirect href={user?.role === 'admin' ? '/admin' : '/(tabs)'} />;
 }

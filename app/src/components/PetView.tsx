@@ -7,6 +7,7 @@ import { isMonster, MonsterShape } from './monsters';
 
 export interface PetLook {
   species?: string;
+  blink?: boolean; // eyes closed for a moment (idle blinking)
   stage: Stage;
   form: Form | null;
   traits: Traits | null;
@@ -294,7 +295,7 @@ export function PetArt({ look, size = 220 }: { look: PetLook; size?: number }) {
     return (
       <Svg width={size} height={size} viewBox="0 0 200 200">
         <G transform={`translate(100 184) scale(${k}) translate(-60 -110)`}>
-          <MonsterShape species={look.species} mood={mood} />
+          <MonsterShape species={look.species} mood={mood} blink={look.blink} />
         </G>
         <G transform={`translate(100 180) scale(${STAGE_SCALE[stage]}) translate(-100 -180)`}>
           {equipped.map((item) => (
@@ -432,23 +433,47 @@ export function PetView({
   onPet?: () => void;
   ref?: Ref<PetHandle>;
 }) {
-  const t = useRef(new Animated.Value(0)).current;
-  const squish = useRef(new Animated.Value(0)).current;
+  // Motion layers. Breathing never stops; small idle actions play now and then on top.
+  const breathe = useRef(new Animated.Value(0)).current; // 0..1, slow in-out
+  const hopY = useRef(new Animated.Value(0)).current; // px, negative is up
+  const stretch = useRef(new Animated.Value(0)).current; // -1 squashed .. 0 rest .. 1 stretched tall
+  const tilt = useRef(new Animated.Value(0)).current; // degrees
+  const lookX = useRef(new Animated.Value(0)).current; // -1 left .. 1 right
+  const one = useRef(new Animated.Value(1)).current;
+  const [blink, setBlink] = useState(false);
   const [floats, setFloats] = useState<Float[]>([]);
   const nextId = useRef(0);
   const reduced = useReducedMotion();
+  const isEgg = look.stage === 'egg';
   const sleepy = look.mood === 'sleepy' || look.mood === 'asleep';
-  const asleep = look.mood === 'asleep' && look.stage !== 'egg';
-  const weak = look.mood === 'weak' && look.stage !== 'egg';
+  const asleep = look.mood === 'asleep' && !isEgg;
+  const weak = look.mood === 'weak' && !isEgg;
+  const happy = look.mood === 'happy';
+  const busy = useRef(false);
+
+  const ease = Easing.inOut(Easing.quad);
+  const to = (v: Animated.Value, toValue: number, duration: number, easing = ease) => Animated.timing(v, { toValue, duration, easing, useNativeDriver: true });
+  const settle = (v: Animated.Value) => Animated.spring(v, { toValue: 0, speed: 14, bounciness: 10, useNativeDriver: true });
+
+  // A real hop: crouch, spring up stretched, fall, squash on landing, wobble back to rest.
+  const hop = useCallback(
+    (height: number) =>
+      Animated.sequence([
+        to(stretch, -0.7, 110, Easing.out(Easing.quad)),
+        Animated.parallel([to(hopY, -size * height, 190, Easing.out(Easing.quad)), to(stretch, 0.8, 150, Easing.out(Easing.quad))]),
+        Animated.parallel([to(hopY, 0, 170, Easing.in(Easing.quad)), to(stretch, 0, 170)]),
+        to(stretch, -0.55, 70, Easing.out(Easing.quad)),
+        settle(stretch),
+      ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [size],
+  );
 
   const react = useCallback(
     (kind: 'heart' | 'treat' = 'heart') => {
       if (!reduced) {
-        squish.setValue(0);
-        Animated.sequence([
-          Animated.timing(squish, { toValue: 1, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.spring(squish, { toValue: 0, friction: 3, tension: 120, useNativeDriver: true }),
-        ]).start();
+        busy.current = true;
+        hop(isEgg ? 0.04 : 0.1).start(() => (busy.current = false));
       }
       const count = kind === 'treat' ? 4 : 3;
       const added: Float[] = Array.from({ length: count }, (_, i) => ({
@@ -464,43 +489,141 @@ export function PetView({
         ),
       );
     },
-    [reduced, size, squish],
+    [reduced, size, hop, isEgg],
   );
 
   useImperativeHandle(ref, () => ({ react }), [react]);
 
+  // Breathing: slow when sleepy or weak, a little quicker when awake.
   useEffect(() => {
     if (reduced) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(t, { toValue: 1, duration: sleepy ? 2200 : weak ? 1600 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(t, { toValue: 0, duration: sleepy ? 2200 : weak ? 1600 : 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
+    const ms = asleep ? 2600 : sleepy || weak ? 2200 : 1700;
+    const loop = Animated.loop(Animated.sequence([to(breathe, 1, ms), to(breathe, 0, ms)]));
     loop.start();
     return () => loop.stop();
-  }, [t, sleepy, weak, reduced]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breathe, asleep, sleepy, weak, reduced]);
 
-  const idle =
-    look.stage === 'egg'
-      ? [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-4deg', '4deg'] }) }]
-      : sleepy
-        ? [{ scaleY: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] }) }]
-        : weak
-          ? // A tired droop: sinks a little and leans, instead of bouncing.
-            [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.02] }) }, { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['-2deg', '2deg'] }) }]
-          : [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }) }];
-  // Squash wider and shorter, anchored near the feet.
-  const squishTransform = [
-    { translateY: squish.interpolate({ inputRange: [0, 1], outputRange: [0, size * 0.06] }) },
-    { scaleX: squish.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
-    { scaleY: squish.interpolate({ inputRange: [0, 1], outputRange: [1, 0.86] }) },
+  // Blinking: every few seconds, sometimes twice. Not while the eyes are already closed.
+  useEffect(() => {
+    if (isEgg || sleepy) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        setBlink(true);
+        timer = setTimeout(() => {
+          setBlink(false);
+          if (Math.random() < 0.25) {
+            timer = setTimeout(() => {
+              setBlink(true);
+              timer = setTimeout(() => (setBlink(false), schedule()), 110);
+            }, 160);
+          } else schedule();
+        }, weak ? 220 : 120);
+      }, 2200 + Math.random() * 3200);
+    };
+    schedule();
+    return () => {
+      clearTimeout(timer);
+      setBlink(false);
+    };
+  }, [isEgg, sleepy, weak]);
+
+  // Idle actions, chosen at random so it never feels like a loop.
+  useEffect(() => {
+    if (reduced || asleep) return;
+    let timer: ReturnType<typeof setTimeout>;
+    let alive = true;
+    const pick = (): Animated.CompositeAnimation | null => {
+      const r = Math.random();
+      if (isEgg) {
+        // A little wobble, as if something inside moved.
+        return r < 0.6 ? Animated.sequence([to(tilt, -7, 80), to(tilt, 7, 110), to(tilt, -4, 100), to(tilt, 3, 90), settle(tilt)]) : null;
+      }
+      const glance = (dir: number, hold: number, speed: number) =>
+        Animated.sequence([
+          Animated.parallel([to(lookX, dir, speed), to(tilt, dir * 5, speed)]),
+          Animated.delay(hold),
+          Animated.parallel([to(lookX, 0, speed), to(tilt, 0, speed)]),
+        ]);
+      if (weak) {
+        // A tired sigh: sinks and squashes slowly, then recovers.
+        if (r < 0.5) return Animated.sequence([Animated.parallel([to(hopY, size * 0.025, 700), to(stretch, -0.35, 700)]), Animated.delay(300), Animated.parallel([to(hopY, 0, 900), to(stretch, 0, 900)])]);
+        return r < 0.8 ? glance(r < 0.65 ? -1 : 1, 900, 700) : null;
+      }
+      if (sleepy) return r < 0.5 ? glance(r < 0.25 ? -1 : 1, 1100, 650) : null;
+      if (r < 0.3) return hop(0.07 + Math.random() * 0.04);
+      if (r < 0.42 && happy) return Animated.sequence([hop(0.07), Animated.delay(60), hop(0.09)]);
+      if (r < 0.7) return glance(Math.random() < 0.5 ? -1 : 1, 500 + Math.random() * 700, 260);
+      if (r < 0.88) return Animated.sequence([to(tilt, -6, 120), to(tilt, 6, 160), to(tilt, -4, 140), settle(tilt)]);
+      return null; // just breathe this time
+    };
+    const schedule = () => {
+      const wait = weak || sleepy ? 3500 + Math.random() * 4000 : 2000 + Math.random() * 3500;
+      timer = setTimeout(() => {
+        const action = busy.current ? null : pick();
+        if (!action) return alive && schedule();
+        busy.current = true;
+        action.start(() => {
+          busy.current = false;
+          if (alive) schedule();
+        });
+      }, wait);
+    };
+    schedule();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      [hopY, stretch, tilt, lookX].forEach((v) => {
+        v.stopAnimation();
+        v.setValue(0);
+      });
+      busy.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced, asleep, isEgg, weak, sleepy, happy, size]);
+
+  // Combine the layers. Scaling is anchored near the feet so the pet squashes into the ground, not the air.
+  const scaleY = Animated.multiply(
+    breathe.interpolate({ inputRange: [0, 1], outputRange: [1, asleep ? 1.035 : 1.025] }),
+    stretch.interpolate({ inputRange: [-1, 0, 1], outputRange: [0.84, 1, 1.1] }),
+  );
+  const scaleX = Animated.multiply(
+    breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 0.99] }),
+    stretch.interpolate({ inputRange: [-1, 0, 1], outputRange: [1.12, 1, 0.93] }),
+  );
+  const anchorY = Animated.multiply(Animated.subtract(one, scaleY), size * 0.42);
+  const motion = [
+    { translateX: Animated.multiply(lookX, size * 0.035) },
+    { translateY: Animated.add(hopY, anchorY) },
+    { rotate: tilt.interpolate({ inputRange: [-90, 90], outputRange: ['-90deg', '90deg'] }) },
+    { scaleX },
+    { scaleY },
   ];
+  // A soft shadow that shrinks as the pet leaves the ground.
+  const shadowScale = hopY.interpolate({ inputRange: [-size * 0.2, 0], outputRange: [0.6, 1], extrapolate: 'clamp' });
 
   const body = (
     <View style={{ width: size, height: size }}>
-      <Animated.View style={{ transform: [...squishTransform, ...idle], opacity: weak ? 0.88 : 1 }}>
-        <PetArt look={look} size={size} />
+      {!isEgg && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: size * 0.3,
+            width: size * 0.4,
+            top: size * 0.89,
+            height: size * 0.05,
+            borderRadius: size,
+            backgroundColor: '#1D2433',
+            // The drawing has its own shadow at rest; this one only shows once the pet leaves the ground.
+            opacity: hopY.interpolate({ inputRange: [-size * 0.2, -2, 0], outputRange: [0.08, 0.12, 0], extrapolate: 'clamp' }),
+            transform: [{ scaleX: shadowScale }],
+          }}
+        />
+      )}
+      <Animated.View style={{ transform: motion, opacity: weak ? 0.88 : 1 }}>
+        <PetArt look={blink ? { ...look, blink } : look} size={size} />
       </Animated.View>
       {asleep && !reduced && <Snores size={size} />}
       {floats.map((f) => (
@@ -530,7 +653,7 @@ export function PetView({
       accessibilityRole="button"
       accessibilityLabel={`Pet ${look.stage === 'egg' ? 'the egg' : 'your pet'}`}
       onPress={() => {
-        haptic.tap();
+        haptic.pet();
         react();
         onPet();
       }}

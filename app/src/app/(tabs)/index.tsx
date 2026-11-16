@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
+import { dialog } from '@/components/Dialog';
+import { HERO, HeroDecor, PHASE_LABEL, type HeroColors } from '@/components/HeroTheme';
 import { GoldenRadar } from '@/components/GoldenRadar';
 import { petLevel } from '@/components/GrowthPath';
 import { Icon } from '@/components/icons';
@@ -18,37 +19,26 @@ import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { itemEmoji, itemLabel } from '@/lib/items';
 import { getHourlySums } from '@/lib/localDb';
-import { ENERGY_LABEL, energyLevel, lookNow, phaseReply, statusLine, useDayPhase, type DayPhase } from '@/lib/petState';
-import { FORM_LABEL, growthMessage, petReply, STAGE_LABEL } from '@/lib/petText';
+import { ENERGY_LABEL, energyLevel, lookNow, phaseReply, statusLine, useDayPhase } from '@/lib/petState';
+import { growthMessage, petReply } from '@/lib/petText';
 import { useSession } from '@/lib/session';
 import { cachedSync, syncSteps, takePendingSurprises } from '@/lib/sync';
 import type { Palette } from '@/lib/theme';
 import type { Pet, Quest, QuestsResult, Surprise, SyncResult } from '@/lib/types';
 
-// Hero colours follow the time of day: pale gold morning, peach afternoon, coral evening, navy night.
-const HERO: Record<DayPhase, { bg: string; ledge: string; blob: string; text: string; name: string; pill: string; pillText: string; track: string }> = {
-  morning: { bg: '#FFF3CC', ledge: '#FFE08A', blob: '#FFE7A3', text: '#6B4A00', name: '#1D2433', pill: '#FFFFFF', pillText: '#1D2433', track: '#FFFFFFAA' },
-  afternoon: { bg: '#FFE9D9', ledge: '#FFD3B5', blob: '#FFD9BE', text: '#6B3A1A', name: '#1D2433', pill: '#FFFFFF', pillText: '#1D2433', track: '#FFFFFFAA' },
-  evening: { bg: '#FFE0D6', ledge: '#FFC2B0', blob: '#FFCDBE', text: '#7A2E1F', name: '#1D2433', pill: '#FFFFFF', pillText: '#1D2433', track: '#FFFFFFAA' },
-  night: { bg: '#22305A', ledge: '#141E3D', blob: '#2C3B6B', text: '#C9D4FF', name: '#FFFFFF', pill: '#141E3D', pillText: '#E3E9FF', track: '#FFFFFF26' },
-};
-const PHASE_LABEL: Record<DayPhase, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Asleep' };
-const STARS: [number, number, number][] = [[18, 14, 2], [46, 30, 1.5], [70, 10, 2], [120, 22, 1.5], [150, 8, 2.2], [178, 34, 1.4], [96, 44, 1.2]];
-
-function EnergyMeter({ energy, hero }: { energy: number | undefined; hero: (typeof HERO)[DayPhase] }) {
+function EnergyMeter({ energy, hero }: { energy: number | undefined; hero: HeroColors }) {
   const c = useColors();
   const level = energyLevel(energy);
   const color = { full: c.accent, okay: c.gold, tired: c.flame, weak: c.berry }[level];
   const value = energy ?? 70;
+  const warn = level === 'tired' || level === 'weak';
   return (
-    <View style={{ gap: 4, marginTop: 2 }} accessible accessibilityLabel={`Energy ${value} percent, ${ENERGY_LABEL[level]}`}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        <Icon.bolt size={14} color={color} />
-        <Text style={{ fontFamily: fonts.bodyHeavy, fontSize: 12, color: hero.text }}>
-          Energy · {ENERGY_LABEL[level]}
-        </Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }} accessible accessibilityLabel={`Energy ${value} percent, ${ENERGY_LABEL[level]}`}>
+      <Icon.bolt size={14} color={color} />
+      <View style={{ flex: 1 }}>
+        <Bar value={value / 100} height={8} color={color} track={hero.track} />
       </View>
-      <Bar value={value / 100} height={10} color={color} track={hero.track} />
+      <Text style={{ fontFamily: fonts.bodyHeavy, fontSize: 12, color: warn ? color : hero.text }}>{warn ? ENERGY_LABEL[level].replace('!', '') : `${value}%`}</Text>
     </View>
   );
 }
@@ -133,11 +123,11 @@ export default function Home() {
     setClaiming(id);
     try {
       const r = await api<QuestsResult>(`/quests/${id}/claim`, { method: 'POST' });
-      haptic.success();
+      haptic.reward();
       setQuests(r.quests);
       setTreats(r.treats);
     } catch (e) {
-      Alert.alert("Couldn't claim", (e as Error).message);
+      dialog("Couldn't claim", (e as Error).message);
     } finally {
       setClaiming(null);
     }
@@ -152,7 +142,6 @@ export default function Home() {
     );
   }
 
-  const stageName = pet.stage === 'adult' && pet.form ? FORM_LABEL[pet.form].name : STAGE_LABEL[pet.stage];
   const grew = pet.stage !== pet.seenStage;
   const { total, goal } = data.today;
   const left = Math.max(0, goal - total);
@@ -181,9 +170,11 @@ export default function Home() {
             accessibilityLabel={claimable ? `Notifications, ${claimable} new` : 'Notifications'}
             onPress={() => {
               haptic.tap();
-              Alert.alert(
+              dialog(
                 claimable ? `${claimable} reward${claimable === 1 ? '' : 's'} to claim` : 'All caught up',
                 claimable ? 'Finished quests are waiting in Daily quests.' : `${pet.name} will nudge you when something happens.`,
+                [{ text: claimable ? 'Nice!' : 'OK' }],
+                { art: <PetArt look={look} size={96} /> },
               );
             }}
             style={[styles.bell, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -195,23 +186,11 @@ export default function Home() {
       />
 
       <View style={[styles.hero, { backgroundColor: hero.bg, borderBottomColor: hero.ledge }]}>
-        <View style={[styles.heroBlob, { backgroundColor: hero.blob }]} />
-        {phase === 'night' && (
-          <Svg pointerEvents="none" width={200} height={50} style={{ position: 'absolute', top: 6, left: 12 }}>
-            {STARS.map(([x, y, r]) => (
-              <Circle key={`${x}-${y}`} cx={x} cy={y} r={r} fill="#FFFFFF" opacity={0.7} />
-            ))}
-          </Svg>
-        )}
-        {phase === 'night' && (
-          <View pointerEvents="none" style={{ position: 'absolute', top: 12, right: 16 }}>
-            <Icon.moon size={26} />
-          </View>
-        )}
+        <HeroDecor phase={phase} />
         <View style={{ flex: 1, gap: 6 }}>
           <View style={[styles.stagePill, { backgroundColor: hero.pill }]}>
-            <Text style={[styles.stagePillText, { color: hero.pillText }]}>
-              {stageName} · Lv {petLevel(pet)} · {PHASE_LABEL[phase]}
+            <Text style={[styles.stagePillText, { color: hero.pillText }]} numberOfLines={1}>
+              Lv {petLevel(pet)} · {PHASE_LABEL[phase]}
             </Text>
           </View>
           <Text style={[styles.petName, { color: hero.name }]} numberOfLines={1}>
@@ -293,7 +272,7 @@ function SurpriseModal({ petName, surprises, onDone }: { petName: string; surpri
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   useEffect(() => {
-    if (surprises.length) haptic.success();
+    if (surprises.length) haptic.reward();
   }, [surprises.length]);
   return (
     <Modal visible={surprises.length > 0} transparent animationType="slide" onRequestClose={onDone}>
@@ -326,7 +305,7 @@ function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDon
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!visible) return;
-    haptic.success();
+    haptic.celebrate();
     scale.setValue(0.2);
     spin.setValue(0);
     Animated.parallel([
@@ -357,7 +336,6 @@ const makeStyles = (colors: Palette) =>
     bell: { width: 40, height: 40, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
     bellDot: { position: 'absolute', top: 6, right: 7, width: 11, height: 11, borderRadius: 6, borderWidth: 2 },
     hero: { borderRadius: 28, borderBottomWidth: 6, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
-    heroBlob: { position: 'absolute', right: -30, bottom: -40, width: 200, height: 120, borderRadius: 100 },
     stagePill: { alignSelf: 'flex-start', height: 26, paddingHorizontal: 10, borderRadius: 999, justifyContent: 'center' },
     stagePillText: { fontFamily: fonts.bodyHeavy, fontSize: 12 },
     petName: { fontFamily: fonts.display, fontSize: 34, lineHeight: 38, includeFontPadding: false },

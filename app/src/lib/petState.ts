@@ -56,20 +56,17 @@ export function lookNow<T extends Pet>(pet: T, phase: DayPhase): T & { mood: Fac
   return { ...pet, mood: faceFor(pet, phase) };
 }
 
-// One line for the Home hero.
+// One short phrase for the Home hero. The step ring already shows steps left, so this stays brief.
 export function statusLine(pet: Pet, phase: DayPhase, stepsLeft: number): string {
-  const name = pet.name;
   const level = energyLevel(pet.energy);
-  if (pet.stage === 'egg') return phase === 'night' ? 'The egg is resting until morning.' : 'Wiggling inside the egg. Every step helps it hatch.';
-  if (phase === 'night') {
-    return level === 'weak' ? `${name} is asleep, worn out. A good walk tomorrow will help.` : `Shh… ${name} is fast asleep. See you in the morning!`;
-  }
-  if (level === 'weak') return `${name} is feeling weak after the missed days. Walk to give them energy!`;
-  if (level === 'tired') return `${name} is getting tired. A walk today will perk them up.`;
-  const left = stepsLeft ? `${stepsLeft.toLocaleString('en')} more to make today perfect.` : 'Today is perfect!';
-  if (phase === 'morning') return `${name} is up and stretching. ${left}`;
-  if (phase === 'afternoon') return pet.mood === 'happy' ? `Bouncing with joy! ${left}` : `A lazy afternoon. ${left}`;
-  return `${name} is winding down for the evening. ${left}`;
+  if (pet.stage === 'egg') return phase === 'night' ? 'Resting till morning.' : 'Wiggling inside!';
+  if (phase === 'night') return level === 'weak' ? 'Asleep, worn out.' : 'Fast asleep. Zzz…';
+  if (level === 'weak') return 'Feeling weak. Walk me!';
+  if (level === 'tired') return 'Getting tired. Walk soon?';
+  if (!stepsLeft) return 'Today is perfect!';
+  if (phase === 'morning') return 'Up and stretching!';
+  if (phase === 'afternoon') return pet.mood === 'happy' ? 'Bouncing with joy!' : 'Lazy afternoon.';
+  return 'Winding down.';
 }
 
 // What the pet says when tapped, given the time and its energy. Falls back to the normal replies.

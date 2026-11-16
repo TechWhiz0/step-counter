@@ -1,26 +1,47 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HERO, HeroDecor } from '@/components/HeroTheme';
+import { Icon } from '@/components/icons';
 import { PetView, type PetHandle } from '@/components/PetView';
-import { Sky } from '@/components/Sky';
-import { Button, ErrorText, Muted, Pill, radius, T, useColors } from '@/components/ui';
+import { Button, ErrorText, fonts, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
-import { bandFor, haptic, SKY } from '@/lib/feel';
+import { haptic } from '@/lib/feel';
+import { useDayPhase } from '@/lib/petState';
 import { FORM_LABEL, moodLine, STAGE_LABEL } from '@/lib/petText';
-import type { Palette } from '@/lib/theme';
 import type { Pet } from '@/lib/types';
 
+// The same tile as Me's stats: icon on the left, number and label on the right, on a ledge.
+function StatTile({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
+  const c = useColors();
+  return (
+    <View style={[styles.tile, { backgroundColor: c.card, borderColor: c.border }]} accessible accessibilityLabel={`${value} ${label}`}>
+      {icon}
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.tileValue, { color: c.ink }]} numberOfLines={1}>
+          {value}
+        </Text>
+        <Text style={[styles.tileLabel, { color: c.muted }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function FriendScreen() {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const c = useColors();
   const insets = useSafeAreaInsets();
+  // The card's colours follow your time of day; the pet itself shows its owner's mood.
+  const phase = useDayPhase();
+  const hero = HERO[phase];
+  const { userId } = useLocalSearchParams<{ userId: string }>();
   const petRef = useRef<PetHandle>(null);
   const [data, setData] = useState<{ nickname: string; streak: number; pet: Pet | null } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,8 +57,8 @@ export default function FriendScreen() {
       const { pet } = await api<{ pet: Pet }>(`/friends/${userId}/treat`, { method: 'POST' });
       setData((d) => (d ? { ...d, pet } : d));
       petRef.current?.react('treat');
-      haptic.success();
-      setNote(`${pet.name} loved it!`);
+      haptic.reward();
+      setSent(`${pet.name} loved it!`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -46,63 +67,76 @@ export default function FriendScreen() {
   }
 
   const pet = data?.pet;
-  const band = bandFor(new Date().getHours());
-  const light = SKY[band].light;
+  const stage = pet ? (pet.stage === 'adult' && pet.form ? FORM_LABEL[pet.form].name : STAGE_LABEL[pet.stage]) : '';
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 32 }}>
-      <Stack.Screen options={{ headerTintColor: light ? '#fff' : colors.ink }} />
-      <StatusBar style={light ? 'light' : 'dark'} />
-      <Sky band={band} style={[styles.hero, { paddingTop: insets.top + 56 }]}>
-        {data && (
-          <T v="label" style={{ color: light ? '#C9D6EA' : colors.muted }}>
-            Visiting {data.nickname}
-          </T>
-        )}
+    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 28 }]}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <Tap onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={[styles.back, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Icon.chevronLeft size={20} color={c.ink} />
+        </Tap>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.kicker, { color: c.accentText }]}>Visiting</Text>
+          <Text style={[styles.title, { color: c.ink }]} numberOfLines={1}>
+            {data?.nickname ?? '…'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.hero, { backgroundColor: hero.bg, borderBottomColor: hero.ledge }]}>
+        <HeroDecor phase={phase} blob="center" />
         {pet ? (
           <>
-            <PetView ref={petRef} look={pet} size={230} onPet={() => {}} />
-            <T v="title" style={{ color: light ? '#fff' : colors.ink }}>{pet.name}</T>
-            <Pill tone="glass" style={{ alignSelf: 'center' }}>
-              {pet.stage === 'adult' && pet.form ? FORM_LABEL[pet.form].name : STAGE_LABEL[pet.stage]}
-            </Pill>
+            <PetView ref={petRef} look={pet} size={190} onPet={() => {}} />
+            <Text style={[styles.petName, { color: hero.name }]} numberOfLines={1}>
+              {pet.name}
+            </Text>
+            <View style={[styles.pill, { backgroundColor: hero.pill }]}>
+              <Text style={[styles.pillText, { color: hero.pillText }]} numberOfLines={1}>
+                {stage}
+              </Text>
+            </View>
+            <Text style={[styles.mood, { color: hero.text }]}>{moodLine(pet).replace(`${pet.name} is `, '').replace(/^./, (m) => m.toUpperCase())}</Text>
           </>
         ) : (
-          <View style={{ height: 200, justifyContent: 'center' }}>
-            {data && <Muted>{data.nickname} hasn't got a pet yet.</Muted>}
+          <View style={styles.empty}>
+            <Text style={[styles.mood, { color: hero.text }]}>{data ? `${data.nickname} hasn't hatched a pet yet.` : 'Loading…'}</Text>
           </View>
         )}
-      </Sky>
-
-      <View style={styles.body}>
-        <ErrorText message={error} />
-        {pet && data && (
-          <>
-            <T v="body" style={{ textAlign: 'center' }}>{moodLine(pet)}</T>
-            <View style={styles.stats}>
-              <View style={styles.stat}>
-                <T v="number">🔥 {data.streak}</T>
-                <Muted style={{ fontSize: 12 }}>day streak</Muted>
-              </View>
-              <View style={styles.stat}>
-                <T v="number">🍪 {pet.treatsReceived}</T>
-                <Muted style={{ fontSize: 12 }}>treats received</Muted>
-              </View>
-            </View>
-            {note ? <T v="h3" style={{ textAlign: 'center', color: colors.good }}>{note}</T> : null}
-            <Button label={note ? 'Treat sent' : 'Send a treat'} onPress={treat} busy={busy} disabled={!!note} />
-            <Muted style={{ textAlign: 'center' }}>One treat per friend per day. A treat cheers up a sleepy pet.</Muted>
-          </>
-        )}
       </View>
+
+      <ErrorText message={error} />
+
+      {pet && data && (
+        <>
+          <View style={styles.tiles}>
+            <StatTile icon={<Icon.flame size={26} inner />} value={`${data.streak} ${data.streak === 1 ? 'day' : 'days'}`} label="streak" />
+            <StatTile icon={<Icon.berry size={26} />} value={String(pet.treatsReceived)} label="treats received" />
+          </View>
+          <Button label={sent ? 'Treat sent' : 'Send a treat'} onPress={treat} busy={busy} disabled={!!sent} icon={sent ? undefined : <Icon.berry size={18} />} />
+          <Text style={[styles.note, { color: sent ? c.accentText : c.muted }]}>{sent ?? 'One treat per friend each day. It cheers up a sleepy pet.'}</Text>
+        </>
+      )}
     </ScrollView>
   );
 }
 
-const makeStyles = (colors: Palette) =>
-  StyleSheet.create({
-  hero: { alignItems: 'center', gap: 6, paddingBottom: 40, borderBottomLeftRadius: radius.xl + 8, borderBottomRightRadius: radius.xl + 8 },
-  body: { padding: 20, gap: 14 },
-  stats: { flexDirection: 'row', gap: 12 },
-  stat: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.lg, padding: 14, alignItems: 'center', gap: 2 },
+const styles = StyleSheet.create({
+  page: { paddingHorizontal: 18, gap: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  back: { width: 44, height: 44, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  kicker: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
+  title: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, includeFontPadding: false },
+  hero: { borderRadius: 28, borderBottomWidth: 6, paddingTop: 18, paddingBottom: 20, paddingHorizontal: 18, alignItems: 'center', gap: 6, overflow: 'hidden' },
+  petName: { fontFamily: fonts.display, fontSize: 32, lineHeight: 36, includeFontPadding: false },
+  pill: { height: 26, paddingHorizontal: 12, borderRadius: 999, justifyContent: 'center' },
+  pillText: { fontFamily: fonts.bodyHeavy, fontSize: 12 },
+  mood: { fontFamily: fonts.bodyBold, fontSize: 14, lineHeight: 19, textAlign: 'center', marginTop: 2 },
+  empty: { height: 220, alignItems: 'center', justifyContent: 'center' },
+  tiles: { flexDirection: 'row', gap: 10 },
+  tile: { flex: 1, borderWidth: 2, borderBottomWidth: 5, borderRadius: 18, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tileValue: { fontFamily: fonts.display, fontSize: 20, lineHeight: 24, includeFontPadding: false },
+  tileLabel: { fontFamily: fonts.body, fontSize: 12 },
+  note: { fontFamily: fonts.bodySemi, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });

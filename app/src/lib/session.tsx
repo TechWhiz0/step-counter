@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api, tokenStore } from './api';
 import { registerBackgroundSync, unregisterBackgroundSync } from './background';
 import { clearLocal, getJson, setJson } from './localDb';
+import { cancelAll } from './notifications';
 import type { User } from './types';
 
 type Status = 'loading' | 'signedOut' | 'signedIn';
@@ -58,6 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await unregisterBackgroundSync().catch(() => {});
+    await cancelAll();
     await tokenStore.clear();
     await clearLocal();
     setUserState(null);

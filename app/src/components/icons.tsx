@@ -115,6 +115,12 @@ export const Icon = {
       <Path d="M3 10h18M8 3v4M16 3v4" />
     </Line>
   ),
+  logout: (p: LineProps) => (
+    <Line {...p}>
+      <Path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
+      <Path d="M10 16l-4-4 4-4M6 12h10" />
+    </Line>
+  ),
   plus: (p: LineProps) => (
     <Line {...p}>
       <Path d="M12 5v14M5 12h14" />

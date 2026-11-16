@@ -317,10 +317,10 @@ export function isMonster(species: string | null | undefined): species is string
   return !!species && species in MONSTERS;
 }
 
-function Face({ spec, mood }: { spec: FaceSpec; mood: FaceMood }) {
+function Face({ spec, mood, blink = false }: { spec: FaceSpec; mood: FaceMood; blink?: boolean }) {
   const mouthX = 60;
   const { mouthY } = spec;
-  const closed = mood === 'sleepy' || mood === 'asleep';
+  const closed = blink || mood === 'sleepy' || mood === 'asleep';
   const mouth =
     mood === 'happy' ? (
       <Path d={`M${mouthX - 7} ${mouthY - 2}q7 10 14 0z`} fill={INK} />
@@ -393,12 +393,13 @@ function Face({ spec, mood }: { spec: FaceSpec; mood: FaceMood }) {
 }
 
 // The monster as SVG children in the 120 box, for composing into a bigger drawing.
-export function MonsterShape({ species, mood = 'happy' }: { species: string; mood?: FaceMood }) {
+// `blink` closes the eyes for a moment while keeping the mouth.
+export function MonsterShape({ species, mood = 'happy', blink }: { species: string; mood?: FaceMood; blink?: boolean }) {
   const def = MONSTERS[species] ?? MONSTERS.mochi;
   return (
     <G>
       {def.body}
-      <Face spec={def.face} mood={mood} />
+      <Face spec={def.face} mood={mood} blink={blink} />
     </G>
   );
 }

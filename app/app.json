@@ -38,7 +38,8 @@
       [
         "expo-notifications",
         {
-          "color": "#FF8A3D"
+          "icon": "./assets/notification-icon.png",
+          "color": "#3D9BF5"
         }
       ],
       [
@@ -59,7 +60,8 @@
           "background": true
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

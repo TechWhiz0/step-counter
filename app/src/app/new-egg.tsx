@@ -22,7 +22,7 @@ export default function NewEgg() {
     try {
       await api('/pet/new-egg', { body: { name: name.trim() } });
       await syncSteps().catch(() => null);
-      haptic.success();
+      haptic.celebrate();
       router.dismissTo('/(tabs)');
     } catch (e) {
       setError((e as Error).message);

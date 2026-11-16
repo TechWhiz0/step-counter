@@ -25,7 +25,8 @@ export default function Register() {
       const res = await api<{ token: string; user: User }>('/auth/register', { body: { nickname, email, password, timezone } });
       await signIn(res.token, res.user);
       haptic.success();
-      router.replace('/onboarding');
+      // Emails listed in the server's ADMIN_EMAILS sign up as admins and skip the walker onboarding.
+      router.replace(res.user.role === 'admin' ? '/admin' : '/onboarding');
     } catch (e) {
       haptic.warn();
       setError((e as Error).message);

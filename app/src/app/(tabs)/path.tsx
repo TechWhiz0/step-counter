@@ -1,11 +1,12 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { chapterFor, type PathNode } from '@/components/GrowthPath';
 import { Icon } from '@/components/icons';
-import { PetView } from '@/components/PetView';
+import { PetArt, PetView } from '@/components/PetView';
+import { dialog } from '@/components/Dialog';
 import { Bar, fonts, Muted, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
 import { lookNow, useDayPhase } from '@/lib/petState';
@@ -166,9 +167,11 @@ export default function GrowthPathScreen() {
             accessibilityLabel="Chapter guide"
             onPress={() => {
               haptic.tap();
-              Alert.alert(
+              dialog(
                 `Chapter ${ch.chapter} · ${ch.chapterName}`,
                 `Every step you walk helps ${pet.name} grow. Reach each stop on the path to open the next one. The chest holds a surprise, and the last stop is ${pet.name}'s next form.`,
+                [{ text: 'Got it' }],
+                { art: <PetArt look={lookNow(pet, phase)} size={96} /> },
               );
             }}
             style={styles.guide}

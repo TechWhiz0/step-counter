@@ -1,13 +1,42 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { playSound } from './sound';
 
+// Each micro-interaction gets a haptic and a matching little sound.
 // Haptics never block or throw: a phone without a motor just stays quiet.
 export const haptic = {
-  tap: () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}),
-  select: () => void Haptics.selectionAsync().catch(() => {}),
-  success: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}),
-  warn: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {}),
+  tap: () => {
+    playSound('tap');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  },
+  select: () => {
+    playSound('tick');
+    void Haptics.selectionAsync().catch(() => {});
+  },
+  success: () => {
+    playSound('chime');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  },
+  warn: () => {
+    playSound('oops');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  },
+  // Petting the pet: a soft bump and a happy squeak.
+  pet: () => {
+    playSound('boop');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft).catch(() => {});
+  },
+  // Claiming a quest or receiving an item: a sparkly arpeggio.
+  reward: () => {
+    playSound('reward');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  },
+  // Big moments (hatching, evolving): a short fanfare.
+  celebrate: () => {
+    playSound('fanfare');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  },
 };
 
 // True when the user asked the OS for less motion; loops and flourishes rest then.

@@ -2,9 +2,11 @@ import { router } from 'expo-router';
 import type { ComponentType, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { dialog } from '@/components/Dialog';
 import { Icon } from '@/components/icons';
 import { fonts, Tap, useColors } from '@/components/ui';
 import { haptic } from '@/lib/feel';
+import { useSession } from '@/lib/session';
 
 type Tab = 'overview' | 'users' | 'monsters' | 'review';
 type IconCmp = ComponentType<{ size?: number; color?: string }>;
@@ -79,11 +81,28 @@ export function SquareButton({ label, onPress, children }: { label: string; onPr
   );
 }
 
-export function BackButton() {
+// Admins only use the admin screens, so the top-left button signs out instead of going back.
+export function LogoutButton() {
   const c = useColors();
+  const { signOut } = useSession();
   return (
-    <SquareButton label="Leave admin" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
-      <Icon.chevronLeft size={20} color={c.ink} />
+    <SquareButton
+      label="Log out"
+      onPress={() =>
+        dialog('Log out of admin?', 'You can log back in any time.', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Log out',
+            style: 'destructive',
+            onPress: async () => {
+              await signOut();
+              router.replace('/welcome');
+            },
+          },
+        ])
+      }
+    >
+      <Icon.logout size={20} color={c.ink} />
     </SquareButton>
   );
 }
@@ -92,7 +111,7 @@ export function PageTitle({ children, right, back }: { children: string; right?:
   const c = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      {back && <BackButton />}
+      {back && <LogoutButton />}
       <Text style={{ flex: 1, fontFamily: fonts.display, fontSize: 26, color: c.ink, includeFontPadding: false }}>{children}</Text>
       {right}
     </View>

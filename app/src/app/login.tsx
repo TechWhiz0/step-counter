@@ -22,8 +22,9 @@ export default function Login() {
     try {
       const res = await api<{ token: string; user: User }>('/auth/login', { body: { email, password } });
       await signIn(res.token, res.user);
-      const { pet } = await api<{ pet: Pet | null }>('/pet');
       haptic.success();
+      if (res.user.role === 'admin') return router.replace('/admin');
+      const { pet } = await api<{ pet: Pet | null }>('/pet');
       router.replace(pet ? '/(tabs)' : '/onboarding');
     } catch (e) {
       haptic.warn();

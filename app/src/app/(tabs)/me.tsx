@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, LeagueBadge, leagueName } from '@/components/icons';
 import { MonsterIcon, monsterTint } from '@/components/monsters';
@@ -12,7 +12,10 @@ import { lookNow, useDayPhase } from '@/lib/petState';
 import { lastDays } from '@/lib/dates';
 import { haptic } from '@/lib/feel';
 import { openHealthSettings } from '@/lib/health';
+import { ensureNotificationPermission, getNotifPrefs, NOTIF_KINDS, setNotifPref, type NotifKind } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
+import { syncSteps } from '@/lib/sync';
+import { playSound, useSoundsEnabled } from '@/lib/sound';
 import type { MonstersResult, Pet, User } from '@/lib/types';
 
 const GOAL_STEP = 500;
@@ -20,7 +23,7 @@ const GOAL_MIN = 1000;
 const GOAL_MAX = 50000;
 const DAY_LETTER = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-type Open = 'goal' | 'data' | null;
+type Open = 'goal' | 'data' | 'notifs' | null;
 
 function StatTile({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
   const c = useColors();
@@ -65,6 +68,21 @@ function Row({ label, value, open, onPress, last, children }: { label: string; v
 export default function Me() {
   const c = useColors();
   const phase = useDayPhase();
+  const [sounds, setSounds] = useSoundsEnabled();
+  const [notifs, setNotifs] = useState<Record<NotifKind, boolean> | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      void getNotifPrefs().then(setNotifs);
+    }, []),
+  );
+  async function toggleNotif(kind: NotifKind, on: boolean) {
+    setNotifs((p) => (p ? { ...p, [kind]: on } : p));
+    if (on) await ensureNotificationPermission().catch(() => false);
+    setNotifs(await setNotifPref(kind, on));
+    // Re-plan reminders with the new choice.
+    if (on) void syncSteps().catch(() => null);
+  }
+  const notifsOn = notifs ? NOTIF_KINDS.filter((k) => notifs[k.kind]).length : 0;
   const insets = useSafeAreaInsets();
   const { user, setUser, signOut } = useSession();
   const [open, setOpen] = useState<Open>(null);
@@ -215,6 +233,34 @@ export default function Me() {
           </View>
           {goalSaveRow}
         </Row>
+        <Row
+          label="Sounds"
+          value={sounds ? 'On' : 'Off'}
+          onPress={() => {
+            setSounds(!sounds);
+            if (!sounds) playSound('chime');
+          }}
+        />
+        <Row label="Notifications" value={notifs ? `${notifsOn} of ${NOTIF_KINDS.length} on` : ''} open={open === 'notifs'} onPress={() => toggle('notifs')}>
+          {NOTIF_KINDS.map((k) => (
+            <View key={k.kind} style={styles.notifRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.notifLabel, { color: c.ink }]}>{k.label}</Text>
+                <Text style={[styles.notifDetail, { color: c.muted }]}>{k.detail}</Text>
+              </View>
+              <Switch
+                accessibilityLabel={`${k.label} notifications`}
+                value={notifs?.[k.kind] ?? true}
+                onValueChange={(on) => {
+                  haptic.select();
+                  void toggleNotif(k.kind, on);
+                }}
+                trackColor={{ false: c.border, true: c.accent }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          ))}
+        </Row>
         <Row label="Step stats" value="Day · Week · Month" onPress={() => router.push('/stats')} />
         <Row label="Groups & friends" onPress={() => router.push('/groups')} />
         <Row label="Your data" value="Steps only" open={open === 'data'} onPress={() => toggle('data')} last>
@@ -239,18 +285,6 @@ export default function Me() {
         <Icon.chevronRight size={20} color="#FFFFFF" />
       </Tap>
 
-      {user?.role === 'admin' && (
-        <Tap onPress={() => router.push('/admin')} accessibilityRole="link" scaleTo={0.98} style={[styles.card, styles.adminRow, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={[styles.adminIcon, { backgroundColor: c.accentSoft }]}>
-            <Icon.grid size={20} color={c.accent} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowLabel, { color: c.ink }]}>Admin</Text>
-            <Text style={[styles.since, { color: c.muted }]}>Overview, users and monsters</Text>
-          </View>
-          <Icon.chevronRight size={18} color={c.muted} />
-        </Tap>
-      )}
 
       <Button label="Log out" kind="ghost" onPress={signOut} />
       <Text style={[styles.foot, { color: c.muted }]}>Signed in as {user?.email}</Text>
@@ -293,7 +327,8 @@ const styles = StyleSheet.create({
   unlockPic: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF33', alignItems: 'center', justifyContent: 'center' },
   unlockTitle: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: '#FFFFFF' },
   unlockSub: { fontFamily: fonts.body, fontSize: 12, color: '#E3D1FF' },
-  adminRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  adminIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  notifRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 2 },
+  notifLabel: { fontFamily: fonts.bodyHeavy, fontSize: 14 },
+  notifDetail: { fontFamily: fonts.body, fontSize: 12 },
   foot: { textAlign: 'center', fontFamily: fonts.body, fontSize: 13 },
 });

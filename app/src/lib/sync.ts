@@ -1,7 +1,7 @@
 import { api, tokenStore } from './api';
 import { hasStepAccess, readHourlySteps } from './health';
 import { getJson, markSynced, saveStepDays, setJson } from './localDb';
-import { notifySurprises, updateEveningNudge } from './notifications';
+import { refreshNotifications } from './notifications';
 import type { SyncResult } from './types';
 
 const SYNC_DAYS = 7;
@@ -38,14 +38,14 @@ export function syncSteps(): Promise<SyncResult | null> {
 
 async function afterSync(result: SyncResult) {
   await setJson(LAST_SYNC_KEY, { ...result, surprises: [], at: Date.now() });
-  const name = result.pet?.name ?? 'Your pet';
   if (result.surprises.length) {
     // Kept until the home screen shows them.
     const pending = (await getJson<SyncResult['surprises']>('pendingSurprises')) ?? [];
     await setJson('pendingSurprises', [...pending, ...result.surprises]);
-    await notifySurprises(name, result.surprises);
   }
-  await updateEveningNudge(name, result.today.total, result.today.goal, result.today.day).catch(() => {});
+  await refreshNotifications(result).catch((e) => {
+    if (__DEV__) console.warn('notifications:', e);
+  });
 }
 
 export async function cachedSync() {

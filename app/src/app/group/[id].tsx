@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Alert, Animated, Easing, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { dialog } from '@/components/Dialog';
+import { Animated, Easing, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import { PetArt } from '@/components/PetView';
 import { Button, ErrorText, Muted, Pill, radius, shadow, T, Tap, useColors } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -50,7 +51,7 @@ export default function GroupScreen() {
   }, [load]);
 
   function leave() {
-    Alert.alert('Leave group?', 'You can join again later with the code.', [
+    dialog('Leave group?', 'You can join again later with the code.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
