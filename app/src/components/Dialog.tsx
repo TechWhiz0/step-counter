@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { haptic } from '@/lib/feel';
-import { Button, fonts, useColors } from './ui';
+import { Button, fonts, Grain, useColors } from './paper';
 
 // The app's own pop-up, used instead of Android's plain grey alert box.
 // Call it like Alert.alert:  dialog('Leave group?', 'You can join again later.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress }])
@@ -88,7 +88,7 @@ export function DialogHost() {
           accessibilityRole="alert"
           style={[
             styles.card,
-            { backgroundColor: c.card, borderColor: c.border },
+            { backgroundColor: c.paper },
             {
               transform: [
                 { scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] }) },
@@ -97,14 +97,15 @@ export function DialogHost() {
             },
           ]}
         >
+          <Grain />
           {current.art ? <View style={styles.art}>{current.art}</View> : null}
           <Text style={[styles.title, { color: c.ink }]}>{current.title}</Text>
-          {current.message ? <Text style={[styles.message, { color: c.muted }]}>{current.message}</Text> : null}
+          {current.message ? <Text style={[styles.message, { color: c.inkSoft }]}>{current.message}</Text> : null}
           <View style={styles.buttons}>
             {actions.map((b) => (
-              <Button key={b.text} label={b.text} kind={b.style === 'destructive' ? 'danger' : 'primary'} onPress={() => close(b.onPress)} />
+              <Button key={b.text} label={b.text} kind="ink" onPress={() => close(b.onPress)} />
             ))}
-            {cancel ? <Button label={cancel.text} kind="secondary" onPress={() => close(cancel.onPress)} /> : null}
+            {cancel ? <Button label={cancel.text} kind="link" onPress={() => close(cancel.onPress)} /> : null}
           </View>
         </Animated.View>
       </Animated.View>
@@ -113,10 +114,10 @@ export function DialogHost() {
 }
 
 const styles = StyleSheet.create({
-  overlay: { backgroundColor: '#10151F99', alignItems: 'center', justifyContent: 'center', padding: 28 },
-  card: { width: '100%', maxWidth: 360, borderRadius: 28, borderWidth: 2, borderBottomWidth: 6, padding: 22, paddingTop: 18, gap: 8, alignItems: 'center' },
+  overlay: { backgroundColor: 'rgba(35,32,28,0.5)', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  card: { width: '100%', maxWidth: 360, borderRadius: 26, padding: 24, paddingTop: 22, gap: 8, alignItems: 'center', overflow: 'hidden', elevation: 16, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20 },
   art: { marginBottom: 2 },
   title: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, textAlign: 'center', includeFontPadding: false },
-  message: { fontFamily: fonts.body, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  message: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 21, textAlign: 'center' },
   buttons: { alignSelf: 'stretch', gap: 10, marginTop: 10 },
 });

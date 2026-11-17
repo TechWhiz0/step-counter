@@ -5,14 +5,14 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { addDays, dayKey } from '../src/lib/dates.js';
 import { runDayClose } from '../src/jobs/dayClose.js';
-import { GoldenDay, Pet, StepDay, User } from '../src/models/index.js';
+import { Pet, Session, StepDay, User } from '../src/models/index.js';
 
 const app = createApp();
 const today = dayKey(new Date(), 'Asia/Kolkata');
 const hours = (map: Record<number, number>) => Array.from({ length: 24 }, (_, h) => map[h] ?? 0);
 
 async function signUp(email: string, nickname: string) {
-  const res = await request(app).post('/auth/register').send({ email, password: 'walking123', nickname, timezone: 'Asia/Kolkata' });
+  const res = await request(app).post('/auth/register').send({ email, password: 'walking123', username: nickname.toLowerCase(), timezone: 'Asia/Kolkata' });
   assert.equal(res.status, 201, JSON.stringify(res.body));
   return { token: res.body.token as string, id: res.body.user.id as string };
 }
@@ -28,18 +28,68 @@ after(async () => {
   await mongoose.disconnect();
 });
 
-test('register, login and duplicate email', async () => {
+test('register with a unique username, log in with username or email', async () => {
   await signUp('asha@example.com', 'Asha');
-  const dup = await request(app).post('/auth/register').send({ email: 'ASHA@example.com', password: 'walking123', nickname: 'A2' });
-  assert.equal(dup.status, 409);
-  const bad = await request(app).post('/auth/login').send({ email: 'asha@example.com', password: 'nope' });
-  assert.equal(bad.status, 401);
-  const ok = await request(app).post('/auth/login').send({ email: 'asha@example.com', password: 'walking123' });
-  assert.equal(ok.status, 200);
+  const dupEmail = await request(app).post('/auth/register').send({ email: 'ASHA@example.com', password: 'walking123', username: 'asha2' });
+  assert.equal(dupEmail.status, 409);
+  assert.equal(dupEmail.body.field, 'email');
+  const dupName = await request(app).post('/auth/register').send({ email: 'other@example.com', password: 'walking123', username: '@ASHA' });
+  assert.equal(dupName.status, 409);
+  assert.equal(dupName.body.field, 'username');
+  assert.ok(dupName.body.suggestions.length > 0);
+  assert.equal((await request(app).post('/auth/register').send({ email: 'x@example.com', password: 'walking123', username: 'no spaces' })).status, 400);
+  assert.equal((await request(app).post('/auth/register').send({ email: 'y@example.com', password: 'walking123', username: 'admin' })).status, 400);
+
+  const check = await request(app).get('/auth/username?u=Asha');
+  assert.deepEqual([check.body.available, check.body.reason], [false, 'taken']);
+  assert.equal((await request(app).get('/auth/username?u=asha_walks')).body.available, true);
+
+  assert.equal((await request(app).post('/auth/login').send({ login: 'asha', password: 'nope' })).status, 401);
+  const byName = await request(app).post('/auth/login').send({ login: '@Asha', password: 'walking123' });
+  assert.equal(byName.status, 200);
+  assert.equal(byName.body.user.username, 'asha');
+  const byEmail = await request(app).post('/auth/login').send({ email: 'asha@example.com', password: 'walking123' });
+  assert.equal(byEmail.status, 200);
   assert.equal((await request(app).get('/pet')).status, 401);
 });
 
-test('egg hatches, golden steps surprise, streak closes, form evolves', async () => {
+test('each device has its own session; signing out ends only that one', async () => {
+  await signUp('twophones@example.com', 'TwoPhones');
+  const login = (device: string) => request(app).post('/auth/login').send({ login: 'twophones', password: 'walking123', device });
+  const phone = (await login('Pixel')).body.token as string;
+  const tablet = (await login('Tab')).body.token as string;
+  assert.equal((await request(app).get('/auth/me').set(auth(phone))).status, 200);
+  assert.equal((await request(app).get('/auth/me').set(auth(tablet))).status, 200);
+
+  assert.equal((await request(app).post('/auth/logout').set(auth(phone))).status, 204);
+  // The signed-out phone's token is dead, even for a background sync; the tablet carries on.
+  assert.equal((await request(app).post('/steps/sync').set(auth(phone)).send({ days: [] })).status, 401);
+  assert.equal((await request(app).get('/auth/me').set(auth(tablet))).status, 200);
+});
+
+test('forgot password: emailed code sets a new password and signs out every device', async () => {
+  const { token } = await signUp('forgetful@example.com', 'Forgetful');
+  const logs: string[] = [];
+  const orig = console.log;
+  console.log = (...a: unknown[]) => void logs.push(a.join(' '));
+  try {
+    assert.equal((await request(app).post('/auth/forgot').send({ email: 'forgetful@example.com' })).status, 200);
+    // Unknown emails get the same answer, so the form can't be used to find accounts.
+    assert.equal((await request(app).post('/auth/forgot').send({ email: 'nobody@example.com' })).status, 200);
+  } finally {
+    console.log = orig;
+  }
+  const code = logs.join('\n').match(/forgetful@example.com: (\d{6})/)![1];
+  const wrong = code === '000000' ? '111111' : '000000';
+  assert.equal((await request(app).post('/auth/reset').send({ email: 'forgetful@example.com', code: wrong, password: 'newpass123' })).status, 400);
+  const reset = await request(app).post('/auth/reset').send({ email: 'forgetful@example.com', code, password: 'newpass123' });
+  assert.equal(reset.status, 200);
+  assert.equal((await request(app).get('/auth/me').set(auth(token))).status, 401);
+  assert.equal((await request(app).post('/auth/reset').send({ email: 'forgetful@example.com', code, password: 'again1234' })).status, 400);
+  assert.equal((await request(app).post('/auth/login').send({ login: 'forgetful', password: 'newpass123' })).status, 200);
+});
+
+test('egg hatches, streak closes, form evolves', async () => {
   const { token, id } = await signUp('ravi@example.com', 'Ravi');
   const egg = await request(app).post('/pet').set(auth(token)).send({ name: 'Momo' });
   assert.equal(egg.status, 201);
@@ -52,9 +102,8 @@ test('egg hatches, golden steps surprise, streak closes, form evolves', async ()
   assert.equal(sync.status, 200, JSON.stringify(sync.body));
   assert.equal(sync.body.pet.stage, 'egg');
   assert.equal(sync.body.today.total, 3000);
-  const earlySurprises = sync.body.surprises.length;
 
-  // Walk past the goal: hatches, mood happy, every golden step found.
+  // Walk past the goal: hatches, mood happy.
   sync = await request(app).post('/steps/sync').set(auth(token)).send({
     days: [{ day: today, hourly: hours({ 8: 2000, 9: 2000, 12: 2000, 18: 2000 }) }],
   });
@@ -62,12 +111,6 @@ test('egg hatches, golden steps surprise, streak closes, form evolves', async ()
   assert.equal(sync.body.pet.seenStage, 'egg');
   assert.equal(sync.body.pet.mood, 'happy');
   assert.ok(sync.body.pet.traits.hue >= 0);
-  const gd = await GoldenDay.findOne({ userId: id, day: today });
-  const expected = gd!.targets.filter((t) => t <= 8000).length;
-  assert.equal(earlySurprises + sync.body.surprises.length, expected);
-  // The same steps synced again give nothing new.
-  sync = await request(app).post('/steps/sync').set(auth(token)).send({ days: [{ day: today, hourly: hours({ 8: 2000, 9: 2000, 12: 2000, 18: 2000 }) }] });
-  assert.equal(sync.body.surprises.length, 0);
 
   const seen = await request(app).post('/pet/seen').set(auth(token));
   assert.equal(seen.body.pet.seenStage, 'baby');
@@ -102,38 +145,45 @@ test('egg hatches, golden steps surprise, streak closes, form evolves', async ()
   assert.equal((await request(app).post('/pet/equip').set(auth(token)).send({ items: ['crown'] })).status, 400);
   const eq = await request(app).post('/pet/equip').set(auth(token)).send({ items: ['star-badge'] });
   assert.deepEqual(eq.body.pet.equipped, ['star-badge']);
-  assert.equal((await request(app).post('/pet/new-egg').set(auth(token)).send({ name: 'Pip' })).status, 201);
+  // The second pet is no egg: a new monster arrives already hatched, with nothing to reveal.
+  const second = await request(app).post('/pet/new').set(auth(token)).send({ name: 'Pip' });
+  assert.equal(second.status, 201);
+  assert.equal(second.body.pet.stage, 'baby');
+  assert.equal(second.body.pet.seenStage, 'baby');
+  assert.ok(second.body.pet.hatchedAt);
+  assert.equal(second.body.pet.nextStage, 'teen');
   const col = await request(app).get('/pet/collection').set(auth(token));
   assert.equal(col.body.pets.length, 2);
   assert.equal(col.body.pets.filter((p: { isActive: boolean }) => p.isActive).length, 1);
 });
 
-test('groups, leaderboard with hourly cap, visits and treats', async () => {
-  const a = await signUp('meera@example.com', 'Meera');
-  const b = await signUp('kiran@example.com', 'Kiran');
-  await request(app).post('/pet').set(auth(b.token)).send({ name: 'Bun' });
-  const g = await request(app).post('/groups').set(auth(a.token)).send({ name: 'Batch 42' });
-  assert.equal(g.status, 201);
-  assert.match(g.body.group.code, /^[A-Z2-9]{6}$/);
+test('two phones syncing at once keep the higher count for every hour', async () => {
+  const { token, id } = await signUp('parallel@example.com', 'Parallel');
+  await request(app).post('/pet').set(auth(token)).send({ name: 'Duo' });
+  // Phone A saw the morning, phone B the evening, and both overlap at 12:00 with different counts.
+  const a = { days: [{ day: today, hourly: hours({ 8: 1200, 12: 300 }) }] };
+  const b = { days: [{ day: today, hourly: hours({ 12: 700, 19: 900 }) }] };
+  const runs = await Promise.all(Array.from({ length: 6 }, (_, i) => request(app).post('/steps/sync').set(auth(token)).send(i % 2 ? a : b)));
+  assert.ok(runs.every((r) => r.status === 200), runs.map((r) => r.status).join(','));
+  const row = await StepDay.findOne({ userId: id, day: today }).lean();
+  assert.equal(row!.hourly[8], 1200);
+  assert.equal(row!.hourly[12], 700);
+  assert.equal(row!.hourly[19], 900);
+  assert.equal(row!.total, 2800);
+  assert.equal(await StepDay.countDocuments({ userId: id, day: today }), 1);
+});
 
-  // Not in the group yet: can't see the pet.
-  assert.equal((await request(app).get(`/friends/${b.id}/pet`).set(auth(a.token))).status, 404);
-  const join = await request(app).post('/groups/join').set(auth(b.token)).send({ code: g.body.group.code.toLowerCase() });
-  assert.equal(join.body.group.memberCount, 2);
-
-  await request(app).post('/steps/sync').set(auth(a.token)).send({ days: [{ day: today, hourly: hours({ 9: 2000 }) }] });
-  await request(app).post('/steps/sync').set(auth(b.token)).send({ days: [{ day: today, hourly: hours({ 9: 20000 }) }] });
-  const lb = await request(app).get(`/groups/${g.body.group.id}/leaderboard`).set(auth(a.token));
-  assert.equal(lb.status, 200);
-  assert.deepEqual(lb.body.rows.map((r: { nickname: string; steps: number }) => [r.nickname, r.steps]), [['Kiran', 2500], ['Meera', 2000]]);
-  assert.equal(lb.body.rows[1].isMe, true);
-
-  const visit = await request(app).get(`/friends/${b.id}/pet`).set(auth(a.token));
-  assert.equal(visit.body.pet.name, 'Bun');
-  const treat = await request(app).post(`/friends/${b.id}/treat`).set(auth(a.token));
-  assert.equal(treat.body.pet.treatsReceived, 1);
-  assert.equal((await request(app).post(`/friends/${b.id}/treat`).set(auth(a.token))).status, 409);
-  assert.equal((await request(app).post(`/friends/${a.id}/treat`).set(auth(a.token))).status, 400);
+test('another device sees new steps without asking twice (long-poll)', async () => {
+  const { token } = await signUp('livewatch@example.com', 'LiveWatch');
+  const first = await request(app).get('/steps/state').set(auth(token));
+  assert.equal(first.body.today.total, 0);
+  const waiting = request(app).get(`/steps/state?wait=${first.body.rev}`).set(auth(token));
+  const started = Date.now();
+  setTimeout(() => void request(app).post('/steps/sync').set(auth(token)).send({ days: [{ day: today, hourly: hours({ 10: 640 }) }] }).then(() => {}), 150);
+  const updated = await waiting;
+  assert.equal(updated.body.today.total, 640);
+  assert.ok(Date.now() - started < 5000, 'answered as soon as the other device synced');
+  assert.notEqual(updated.body.rev, first.body.rev);
 });
 
 test('account delete removes data', async () => {
@@ -143,18 +193,19 @@ test('account delete removes data', async () => {
   assert.equal((await request(app).delete('/auth/me').set(auth(c.token))).status, 204);
   assert.equal(await Pet.countDocuments({ userId: c.id }), 0);
   assert.equal(await StepDay.countDocuments({ userId: c.id }), 0);
+  assert.equal(await Session.countDocuments({ userId: c.id }), 0);
   assert.equal((await request(app).get('/pet').set(auth(c.token))).status, 401);
 });
 
-test('daily goal can change but the nickname is fixed after sign-up', async () => {
+test('daily goal can change but the username is fixed after sign-up', async () => {
   const { token } = await signUp('fixedname@example.com', 'Fixed');
   const goal = await request(app).patch('/auth/me').set(auth(token)).send({ dailyGoal: 9000 });
   assert.equal(goal.status, 200);
   assert.equal(goal.body.user.dailyGoal, 9000);
-  const rename = await request(app).patch('/auth/me').set(auth(token)).send({ nickname: 'Renamed' });
-  assert.equal(rename.status, 400);
+  assert.equal((await request(app).patch('/auth/me').set(auth(token)).send({ username: 'renamed' })).status, 400);
+  assert.equal((await request(app).patch('/auth/me').set(auth(token)).send({ nickname: 'Renamed' })).status, 400);
   const me = await request(app).get('/auth/me').set(auth(token));
-  assert.equal(me.body.user.nickname, 'Fixed');
+  assert.equal(me.body.user.username, 'fixed');
 });
 
 test('a sync that reads fewer steps never lowers what the server already has', async () => {

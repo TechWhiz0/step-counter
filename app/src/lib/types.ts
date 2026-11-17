@@ -23,83 +23,49 @@ export interface Pet {
   form: Form | null;
   traits: Traits | null;
   mood: Mood;
-  // 5-100 from the last week of walks; missing from older servers.
   energy?: number;
   equipped: string[];
   growth: number;
   nextStage: Stage | null;
   stageProgress: number;
   stepsToNextStage: number;
-  treatsReceived: number;
   isActive: boolean;
   startDay: string;
+  hatchedAt?: string | null;
+  adultAt?: string | null;
 }
+
+export type LeagueTier = 'sprout' | 'bloom' | 'sunflower' | 'starfruit';
 
 export interface User {
   id: string;
+  username: string;
   email: string;
   nickname: string;
   dailyGoal: number;
   timezone: string;
   currentStreak: number;
   bestStreak: number;
-  // Added with quests and leagues; missing from users cached by older app versions.
   role?: 'user' | 'admin';
   lifetimeSteps?: number;
   treats?: number;
   league?: LeagueTier;
+  createdAt?: string;
 }
 
-export interface Surprise {
-  step: number;
-  item: string;
-}
-
-export interface SyncResult {
+export interface TodayState {
   today: { day: string; total: number; goal: number; hourly: number[] };
   streak: { current: number; best: number };
   pet: Pet | null;
-  surprises: Surprise[];
-  // Missing from results cached by older app versions.
-  golden?: GoldenHint;
   lifetimeSteps?: number;
   treats?: number;
   unlockedItems?: string[];
+  rev?: number;
 }
-
-export interface GoldenHint {
-  found: number;
-  total: number;
-  hint: 'cold' | 'warm' | 'hot' | null;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  code: string;
-  memberCount: number;
-}
-
-export interface LeaderboardRow {
-  rank: number;
-  userId: string;
-  nickname: string;
-  streak: number;
-  steps: number;
-  isMe: boolean;
-  pet: Pet | null;
-}
-
-export interface OwnedItem {
-  item: string;
-  count: number;
-  source: 'golden' | 'streak' | 'treat' | 'milestone';
-}
-
-export type LeagueTier = 'sprout' | 'bloom' | 'sunflower' | 'starfruit';
+export type SyncResult = TodayState;
 
 export interface Quest {
-  id: 'morning' | 'goal' | 'golden' | 'treat';
+  id: 'morning' | 'goal';
   title: string;
   progress: number;
   target: number;
@@ -116,6 +82,7 @@ export interface QuestsResult {
 export interface LeagueRow {
   rank: number;
   userId: string;
+  username: string;
   nickname: string;
   streak: number;
   steps: number;
@@ -133,15 +100,13 @@ export interface LeagueBoard {
   daysLeft: number;
   total: number;
   myRank: number | null;
+  hourlyCap?: number;
+  rev?: number;
   rows: LeagueRow[];
 }
 
 export type Rarity = 'starter' | 'rare' | 'epic';
-export type Unlock =
-  | { kind: 'starter' }
-  | { kind: 'steps'; steps: number }
-  | { kind: 'streak'; days: number }
-  | { kind: 'event'; event: string };
+export type Unlock = { kind: 'starter' } | { kind: 'steps'; steps: number } | { kind: 'streak'; days: number } | { kind: 'event'; event: string };
 
 export interface MonsterEntry {
   id: string;
@@ -161,7 +126,7 @@ export interface MonstersResult {
   monsters: MonsterEntry[];
 }
 
-export type ClosetRule = { kind: 'golden' } | { kind: 'streak'; days: number } | { kind: 'steps'; steps: number };
+export type ClosetRule = { kind: 'streak'; days: number } | { kind: 'steps'; steps: number };
 
 export interface ClosetItem {
   item: string;
@@ -175,6 +140,13 @@ export interface ClosetResult {
   items: ClosetItem[];
 }
 
+export interface UsernameCheck {
+  username: string;
+  available: boolean;
+  reason: string | null;
+  suggestions: string[];
+}
+
 // Admin
 export interface AdminOverview {
   days: number;
@@ -186,11 +158,12 @@ export interface AdminOverview {
   needsReview: number;
   stepsPerDay: { day: string; steps: number; walkers: number }[];
   hatchesBySpecies: { species: string; count: number; share: number }[];
-  topGroups: { name: string; members: number; steps: number }[];
+  leagues: { tier: LeagueTier; walkers: number }[];
 }
 
 export interface AdminUser {
   id: string;
+  username: string;
   nickname: string;
   email: string;
   role: 'user' | 'admin';

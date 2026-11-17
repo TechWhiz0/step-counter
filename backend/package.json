@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "tsx --test test/*.test.ts",
+    "test": "NODE_ENV=test tsx --test test/*.test.ts",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",

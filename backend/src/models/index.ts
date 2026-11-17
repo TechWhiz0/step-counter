@@ -3,6 +3,8 @@ import { rules } from '../config.js';
 
 const userSchema = new Schema(
   {
+    // Unique handle shown everywhere other walkers can see you. 3-20 of a-z, 0-9, _.
+    username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     nickname: { type: String, required: true, trim: true, maxlength: 24 },
@@ -23,9 +25,14 @@ const userSchema = new Schema(
     flagged: { type: Boolean, default: false },
     flagReason: { type: String, default: null },
     hiddenFromLeagues: { type: Boolean, default: false },
+    // Forgot-password: a hashed one-time code, when it stops working, and wrong tries so far.
+    resetCodeHash: { type: String, default: null },
+    resetExpires: { type: Date, default: null },
+    resetTries: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
+userSchema.index({ league: 1, hiddenFromLeagues: 1, role: 1 });
 
 const stepDaySchema = new Schema(
   {
@@ -41,6 +48,7 @@ const stepDaySchema = new Schema(
   { timestamps: true },
 );
 stepDaySchema.index({ userId: 1, day: 1 }, { unique: true });
+stepDaySchema.index({ day: 1 });
 
 const traitsSchema = new Schema(
   {
@@ -73,13 +81,15 @@ const petSchema = new Schema(
     // 5-100, from the last week of walks (see energyFor). Low energy means the pet needs walks to recover.
     energy: { type: Number, default: 70 },
     equipped: { type: [String], default: [] },
-    treatsReceived: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    // Only the very first pet starts as an egg. Later pets arrive already hatched (a baby).
+    hatchFree: { type: Boolean, default: false },
     hatchedAt: Date,
     adultAt: Date,
   },
   { timestamps: true },
 );
+petSchema.index({ userId: 1, isActive: 1 });
 
 const itemSchema = new Schema(
   {
@@ -90,34 +100,8 @@ const itemSchema = new Schema(
   },
   { timestamps: true },
 );
-
-const goldenDaySchema = new Schema({
-  userId: { type: Types.ObjectId, ref: 'User', required: true },
-  day: { type: String, required: true },
-  targets: [Number],
-  found: { type: [Number], default: [] },
-});
-goldenDaySchema.index({ userId: 1, day: 1 }, { unique: true });
-
-const groupSchema = new Schema(
-  {
-    name: { type: String, required: true, trim: true, maxlength: 40 },
-    code: { type: String, required: true, unique: true },
-    createdBy: { type: Types.ObjectId, ref: 'User', required: true },
-    members: { type: [{ type: Types.ObjectId, ref: 'User' }], index: true },
-  },
-  { timestamps: true },
-);
-
-const treatSchema = new Schema(
-  {
-    fromUser: { type: Types.ObjectId, ref: 'User', required: true },
-    toPet: { type: Types.ObjectId, ref: 'Pet', required: true },
-    day: { type: String, required: true },
-  },
-  { timestamps: true },
-);
-treatSchema.index({ fromUser: 1, toPet: 1, day: 1 }, { unique: true });
+// A streak or milestone reward can only be granted once per day, even when two syncs race.
+itemSchema.index({ userId: 1, item: 1, source: 1, day: 1 }, { unique: true, partialFilterExpression: { source: { $in: ['streak', 'milestone'] } } });
 
 // Admin overrides for the shipped monster catalog (lib/species.ts).
 const monsterSettingSchema = new Schema(
@@ -128,6 +112,20 @@ const monsterSettingSchema = new Schema(
   },
   { timestamps: true },
 );
+
+// One signed-in device. A token is only good while its session exists, so signing out really ends it.
+const sessionSchema = new Schema({
+  userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
+  device: { type: String, default: null },
+  createdAt: { type: Date, default: () => new Date() },
+  lastSeenAt: { type: Date, default: () => new Date() },
+});
+
+// Small server-wide bookkeeping, e.g. which week the leagues last rolled over.
+const metaSchema = new Schema({
+  key: { type: String, required: true, unique: true },
+  value: { type: Schema.Types.Mixed, default: null },
+});
 
 // One row per claimed daily quest, so a reward can't be claimed twice.
 const questClaimSchema = new Schema(
@@ -144,11 +142,10 @@ export const User = model('User', userSchema);
 export const StepDay = model('StepDay', stepDaySchema);
 export const Pet = model('Pet', petSchema);
 export const Item = model('Item', itemSchema);
-export const GoldenDay = model('GoldenDay', goldenDaySchema);
-export const Group = model('Group', groupSchema);
-export const Treat = model('Treat', treatSchema);
 export const MonsterSetting = model('MonsterSetting', monsterSettingSchema);
 export const QuestClaim = model('QuestClaim', questClaimSchema);
+export const Session = model('Session', sessionSchema);
+export const Meta = model('Meta', metaSchema);
 
 export type UserDoc = HydratedDocument<InferSchemaType<typeof userSchema>>;
 export type PetDoc = HydratedDocument<InferSchemaType<typeof petSchema>>;

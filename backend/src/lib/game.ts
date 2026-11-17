@@ -1,22 +1,13 @@
 import { createHash, randomInt } from 'node:crypto';
+import type { AnyBulkWriteOperation } from 'mongodb';
 import { Types } from 'mongoose';
 import { config, rules } from '../config.js';
-import { GoldenDay, Item, Pet, StepDay, type PetDoc, type UserDoc } from '../models/index.js';
+import { Item, Pet, StepDay, User, type PetDoc, type UserDoc } from '../models/index.js';
 import { addDays, daysBetween, dayKey } from './dates.js';
 import { catalog, pickSpecies } from './species.js';
-import {
-  energyFor,
-  ENERGY_DAYS,
-  formFor,
-  goldenTargets,
-  randomItem,
-  stageFor,
-  stageProgress,
-  traitsFor,
-  type Stage,
-} from './petRules.js';
+import { energyFor, ENERGY_DAYS, formFor, stageFor, stageProgress, traitsFor, type Stage } from './petRules.js';
 
-// Secret-salted so golden step numbers can't be guessed from the client.
+// Secret-salted so a species roll can't be predicted from the client.
 function hashSeed(...parts: string[]): number {
   return createHash('sha256').update([config.jwtSecret, ...parts].join(':')).digest().readUInt32BE(0);
 }
@@ -25,9 +16,28 @@ export function todayFor(user: UserDoc, now = new Date()): string {
   return dayKey(now, user.timezone);
 }
 
+// The first pet: an egg that hatches after the first few thousand steps.
 export async function newEgg(userId: Types.ObjectId, name: string, startDay: string) {
   await Pet.updateMany({ userId, isActive: true }, { isActive: false });
   return Pet.create({ userId, name, seed: randomInt(0, 2 ** 31), startDay });
+}
+
+// Every pet after the first: a new monster, already hatched, picked from what the walker has unlocked.
+export async function newMonster(user: UserDoc, name: string, startDay: string) {
+  await Pet.updateMany({ userId: user._id, isActive: true }, { isActive: false });
+  const species = pickSpecies(await catalog(), { lifetimeSteps: user.lifetimeSteps, bestStreak: user.bestStreak }, randomInt(0, 10_000) / 10_000);
+  return Pet.create({
+    userId: user._id,
+    name,
+    seed: randomInt(0, 2 ** 31),
+    startDay,
+    species,
+    hatchFree: true,
+    hatchedAt: new Date(),
+    stage: 'baby',
+    seenStage: 'baby',
+    growth: rules.stageThresholds.baby,
+  });
 }
 
 export async function activePet(userId: Types.ObjectId) {
@@ -40,10 +50,33 @@ function sumHourly(days: { hourly: number[] }[]): number[] {
   return sums;
 }
 
+// Sets fields on a loaded document that the database already holds, without marking them for a later save().
+function syncFields<T extends object>(doc: { set: (p: string, v: unknown) => void; unmarkModified: (p: string) => void }, values: T) {
+  for (const [k, v] of Object.entries(values)) {
+    doc.set(k, v);
+    doc.unmarkModified(k);
+  }
+}
+
+// Duplicate-key errors from a racing request mean the row is already there, which is what we wanted.
+async function insertIgnoringDuplicates(rows: object[]) {
+  if (!rows.length) return;
+  try {
+    await Item.insertMany(rows, { ordered: false });
+  } catch (e) {
+    const err = e as { code?: number; writeErrors?: { code?: number; err?: { code?: number } }[] };
+    const codes = err.writeErrors?.map((w) => w.code ?? w.err?.code) ?? [err.code];
+    if (!codes.every((c) => c === 11000)) throw e;
+  }
+}
+
 // Recomputes growth, stage, form and traits from stored steps. Safe to call any time.
 export async function refreshPet(pet: PetDoc, user: UserDoc, today: string) {
-  const days = await StepDay.find({ userId: pet.userId, day: { $gte: pet.startDay } }).lean();
-  const growth = days.reduce((s, d) => s + d.cappedTotal, 0);
+  const days = await StepDay.find({ userId: pet.userId, day: { $gte: pet.startDay } })
+    .select('day total cappedTotal hourly -_id')
+    .lean();
+  // A pet that arrived hatched starts with the egg part already behind it.
+  const growth = days.reduce((s, d) => s + d.cappedTotal, 0) + (pet.hatchFree ? rules.stageThresholds.baby : 0);
   const prevStage = pet.stage as Stage;
   const stage = stageFor(growth);
   pet.growth = growth;
@@ -63,16 +96,12 @@ export async function refreshPet(pet: PetDoc, user: UserDoc, today: string) {
 
   if (stage !== 'egg') {
     const lifeDays = Math.max(1, daysBetween(pet.startDay, today) + 1);
-    const fresh = traitsFor({
-      seed: pet.seed,
-      hourlySums: sumHourly(days),
-      avgDailySteps: growth / lifeDays,
-      bestStreak: user.bestStreak,
-    });
+    const fresh = traitsFor({ seed: pet.seed, hourlySums: sumHourly(days), avgDailySteps: growth / lifeDays, bestStreak: user.bestStreak });
     // Colour and size lock in once adult; markings keep growing with streaks.
-    pet.traits = pet.stage === 'adult' && pet.traits && pet.form && prevStage === 'adult'
-      ? { ...fresh, hue: pet.traits.hue, size: pet.traits.size, markings: Math.max(fresh.markings, pet.traits.markings ?? 1) }
-      : fresh;
+    pet.traits =
+      pet.stage === 'adult' && pet.traits && pet.form && prevStage === 'adult'
+        ? { ...fresh, hue: pet.traits.hue, size: pet.traits.size, markings: Math.max(fresh.markings, pet.traits.markings ?? 1) }
+        : fresh;
   }
   pet.energy = energyFor({
     recent: days
@@ -82,75 +111,64 @@ export async function refreshPet(pet: PetDoc, user: UserDoc, today: string) {
     goal: user.dailyGoal,
     today: days.find((d) => d.day === today)?.total ?? 0,
   });
-  await pet.save();
+  if (pet.isModified()) await pet.save();
   return pet;
 }
 
-export async function goldenDay(user: UserDoc, day: string) {
-  const existing = await GoldenDay.findOne({ userId: user._id, day });
-  if (existing) return existing;
-  const targets = goldenTargets(hashSeed(String(user._id), day), user.dailyGoal);
-  try {
-    return await GoldenDay.create({ userId: user._id, day, targets });
-  } catch {
-    return (await GoldenDay.findOne({ userId: user._id, day }))!;
-  }
-}
-
-// Marks newly reached golden steps and grants their items. Returns the new surprises.
-export async function checkGolden(user: UserDoc, day: string, total: number) {
-  const gd = await goldenDay(user, day);
-  const reached = gd.targets.filter((t) => t <= total && !gd.found.includes(t));
-  if (!reached.length) return [];
-  // Claim atomically so two syncs can't grant the same surprise twice.
-  const claimed = await GoldenDay.findOneAndUpdate(
-    { _id: gd._id, found: { $nin: reached } },
-    { $addToSet: { found: { $each: reached } } },
-  );
-  if (!claimed) return [];
-  const surprises = reached.map((step) => ({ step, item: randomItem(hashSeed(String(user._id), day, String(step))) }));
-  await Item.insertMany(surprises.map((s) => ({ userId: user._id, item: s.item, source: 'golden', day })));
-  return surprises;
-}
-
-// A warmer/colder hint for the home screen radar. Never reveals the number itself.
-export async function goldenHint(user: UserDoc, day: string, total: number) {
-  const gd = await goldenDay(user, day);
-  const ahead = gd.targets.filter((t) => t > total && !gd.found.includes(t));
-  const gap = ahead.length ? Math.min(...ahead) - total : null;
-  const hint = gap === null ? null : gap <= rules.goldenHot ? 'hot' : gap <= rules.goldenWarm ? 'warm' : 'cold';
-  return { found: gd.found.length, total: gd.targets.length, hint };
-}
-
-// Closes every finished day since the last close: goal result, streak, mood, streak rewards.
-export async function closeDays(user: UserDoc, today: string) {
+// Closes every finished day since the last close: goal result, streak, streak rewards, mood.
+// Two devices (or a device and the nightly job) can call this at once; only one of them gets to close a day.
+export async function closeDays(user: UserDoc, today: string, opts: { refresh?: boolean } = {}) {
   const yesterday = addDays(today, -1);
-  let day = user.lastClosedDay ? addDays(user.lastClosedDay, 1) : dayKey(user.createdAt ?? new Date(), user.timezone);
+  const start = user.lastClosedDay ?? null;
+  const first = start ? addDays(start, 1) : dayKey(user.createdAt ?? new Date(), user.timezone);
+  if (first > yesterday) return false;
+
+  const rows = await StepDay.find({ userId: user._id, day: { $gte: first, $lte: yesterday } }).select('day total -_id').lean();
+  const totals = new Map(rows.map((r) => [r.day, r.total]));
+  let streak = user.currentStreak;
+  let best = user.bestStreak;
   let lastMet: boolean | null = null;
-  while (day <= yesterday) {
-    const sd = await StepDay.findOneAndUpdate(
-      { userId: user._id, day },
-      { $setOnInsert: { hourly: Array(24).fill(0), total: 0, cappedTotal: 0 } },
-      { upsert: true, new: true },
-    );
-    const met = sd.total >= user.dailyGoal;
-    sd.goal = user.dailyGoal;
-    sd.goalMet = met;
-    await sd.save();
-    user.currentStreak = met ? user.currentStreak + 1 : 0;
-    if (user.currentStreak > user.bestStreak) user.bestStreak = user.currentStreak;
-    const reward = met ? rules.streakRewards[user.currentStreak] : undefined;
-    if (reward) await Item.create({ userId: user._id, item: reward, source: 'streak', day });
+  const ops: AnyBulkWriteOperation[] = [];
+  const rewards: { userId: Types.ObjectId; item: string; source: 'streak'; day: string }[] = [];
+  for (let day = first; day <= yesterday; day = addDays(day, 1)) {
+    const met = (totals.get(day) ?? 0) >= user.dailyGoal;
+    ops.push({
+      updateOne: {
+        filter: { userId: user._id, day },
+        update: {
+          $set: { goal: user.dailyGoal, goalMet: met },
+          $setOnInsert: { hourly: Array(24).fill(0), total: 0, cappedTotal: 0, createdAt: new Date() },
+          $currentDate: { updatedAt: true },
+        },
+        upsert: true,
+      },
+    });
+    streak = met ? streak + 1 : 0;
+    best = Math.max(best, streak);
+    const reward = met ? rules.streakRewards[streak] : undefined;
+    if (reward) rewards.push({ userId: user._id, item: reward, source: 'streak', day });
     lastMet = met;
-    user.lastClosedDay = day;
-    day = addDays(day, 1);
   }
-  await user.save();
+
+  // Claim the range: only succeeds if nobody closed these days since we loaded the user.
+  const values = { currentStreak: streak, bestStreak: best, lastClosedDay: yesterday };
+  const claimed = await User.updateOne({ _id: user._id, lastClosedDay: start }, { $set: values });
+  if (!claimed.modifiedCount) {
+    const fresh = await User.findById(user._id).select('currentStreak bestStreak lastClosedDay').lean();
+    if (fresh) syncFields(user, { currentStreak: fresh.currentStreak, bestStreak: fresh.bestStreak, lastClosedDay: fresh.lastClosedDay });
+    return false;
+  }
+  syncFields(user, values);
+  await StepDay.collection.bulkWrite(ops, { ordered: false });
+  await insertIgnoringDuplicates(rewards);
+
   const pet = await activePet(user._id);
-  if (pet) {
-    if (lastMet !== null) pet.mood = lastMet ? 'happy' : 'sleepy';
-    await refreshPet(pet, user, today);
+  if (pet && lastMet !== null) {
+    pet.mood = lastMet ? 'happy' : 'sleepy';
+    if (opts.refresh !== false) await refreshPet(pet, user, today);
+    else await pet.save();
   }
+  return true;
 }
 
 // Recounts lifetime steps and grants any closet milestone items just passed. Returns the new items.
@@ -159,13 +177,16 @@ export async function refreshLifetime(user: UserDoc, today: string): Promise<str
     { $match: { userId: user._id } },
     { $group: { _id: null, total: { $sum: '$cappedTotal' } } },
   ]);
-  user.lifetimeSteps = agg?.total ?? 0;
-  await user.save();
-  const reached = rules.milestoneItems.filter((m) => m.steps <= user.lifetimeSteps).map((m) => m.item);
+  const lifetimeSteps = agg?.total ?? 0;
+  if (lifetimeSteps !== user.lifetimeSteps) {
+    await User.updateOne({ _id: user._id }, { $set: { lifetimeSteps } });
+    syncFields(user, { lifetimeSteps });
+  }
+  const reached = rules.milestoneItems.filter((m) => m.steps <= lifetimeSteps).map((m) => m.item);
   if (!reached.length) return [];
   const owned = new Set(await Item.distinct('item', { userId: user._id, source: 'milestone', item: { $in: reached } }));
   const fresh = reached.filter((i) => !owned.has(i));
-  if (fresh.length) await Item.insertMany(fresh.map((item) => ({ userId: user._id, item, source: 'milestone', day: today })));
+  await insertIgnoringDuplicates(fresh.map((item) => ({ userId: user._id, item, source: 'milestone', day: today })));
   return fresh;
 }
 
@@ -175,9 +196,9 @@ export async function checkAnomalies(user: UserDoc, days: { day: string; hourly:
   for (const d of days) {
     const hour = d.hourly.findIndex((h) => h > rules.anomalyHourSteps);
     if (hour >= 0) {
-      user.flagged = true;
-      user.flagReason = `${d.hourly[hour].toLocaleString('en')} steps in one hour on ${d.day} at ${hour}:00`;
-      await user.save();
+      const flagReason = `${d.hourly[hour].toLocaleString('en')} steps in one hour on ${d.day} at ${hour}:00`;
+      await User.updateOne({ _id: user._id, flagged: false }, { $set: { flagged: true, flagReason } });
+      syncFields(user, { flagged: true, flagReason });
       return;
     }
   }
@@ -200,7 +221,6 @@ export function serializePet(pet: PetDoc) {
     nextStage: p.next,
     stageProgress: p.progress,
     stepsToNextStage: p.remaining,
-    treatsReceived: pet.treatsReceived,
     isActive: pet.isActive,
     startDay: pet.startDay,
     hatchedAt: pet.hatchedAt,

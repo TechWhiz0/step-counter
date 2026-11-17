@@ -1,15 +1,17 @@
 import 'dotenv/config';
 
+const isProd = process.env.NODE_ENV === 'production';
+// A guessable secret lets anyone forge a login for any account, so production refuses to start without one.
+if (isProd && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
+  throw new Error('Set JWT_SECRET (32+ random characters) before running in production');
+}
+
 export const config = {
+  isProd,
   mongoUrl: process.env.MONGO_URL ?? 'mongodb://127.0.0.1:27017/steppet',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret',
   port: Number(process.env.PORT ?? 4000),
   timezone: process.env.APP_TIMEZONE ?? 'Asia/Kolkata',
-  // Accounts with these emails become admins when they sign up or log in.
-  adminEmails: (process.env.ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean),
 };
 
 // Game rules live here so they can be tuned without touching logic.
@@ -23,10 +25,6 @@ export const rules = {
   evolutionWindowDays: 14,
   // A time band must hold at least this share of steps to decide the form.
   dominantShare: 0.45,
-  goldenStepsPerDay: 3,
-  // The radar says "hot" within this many steps of the next golden step, "warm" within the second.
-  goldenHot: 300,
-  goldenWarm: 1200,
   streakRewards: { 7: 'star-badge', 14: 'scarf-gold', 30: 'crown' } as Record<number, string>,
   // Closet items granted once lifetime steps pass each total.
   milestoneItems: [

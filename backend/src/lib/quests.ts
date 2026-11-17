@@ -1,7 +1,7 @@
 import { rules } from '../config.js';
-import { GoldenDay, QuestClaim, StepDay, Treat, type UserDoc } from '../models/index.js';
+import { QuestClaim, StepDay, User, type UserDoc } from '../models/index.js';
 
-export type QuestId = 'morning' | 'goal' | 'golden' | 'treat';
+export type QuestId = 'morning' | 'goal';
 
 export interface QuestState {
   id: QuestId;
@@ -17,14 +17,11 @@ const MORNING_TARGET = 2000;
 
 // Today's quests and how far along each one is. Everything is derived from stored data.
 export async function questsFor(user: UserDoc, day: string): Promise<QuestState[]> {
-  const [stepDay, golden, treatsSent, claims] = await Promise.all([
-    StepDay.findOne({ userId: user._id, day }).lean(),
-    GoldenDay.findOne({ userId: user._id, day }).lean(),
-    Treat.countDocuments({ fromUser: user._id, day }),
-    QuestClaim.find({ userId: user._id, day }).lean(),
+  const [stepDay, claims] = await Promise.all([
+    StepDay.findOne({ userId: user._id, day }).select('hourly total').lean(),
+    QuestClaim.find({ userId: user._id, day }).select('quest').lean(),
   ]);
-  const hourly = stepDay?.hourly ?? [];
-  const morning = hourly.slice(0, 12).reduce((s, h) => s + h, 0);
+  const morning = (stepDay?.hourly ?? []).slice(0, 12).reduce((s, h) => s + h, 0);
   const claimed = new Set(claims.map((c) => c.quest));
   const make = (id: QuestId, title: string, progress: number, target: number): QuestState => ({
     id,
@@ -38,8 +35,6 @@ export async function questsFor(user: UserDoc, day: string): Promise<QuestState[
   return [
     make('morning', `Walk ${MORNING_TARGET.toLocaleString('en')} before noon`, morning, MORNING_TARGET),
     make('goal', 'Reach your daily goal', stepDay?.total ?? 0, user.dailyGoal),
-    make('golden', 'Find a golden step', golden?.found.length ?? 0, 1),
-    make('treat', 'Send a treat to a friend', treatsSent, 1),
   ];
 }
 
@@ -52,7 +47,8 @@ export async function claimQuest(user: UserDoc, day: string, id: string) {
   } catch {
     return null; // claimed by a parallel request
   }
-  user.treats += quest.reward;
-  await user.save();
+  const fresh = await User.findByIdAndUpdate(user._id, { $inc: { treats: quest.reward } }, { returnDocument: 'after' }).select('treats').lean();
+  user.set('treats', fresh?.treats ?? user.treats + quest.reward);
+  user.unmarkModified('treats');
   return questsFor(user, day);
 }

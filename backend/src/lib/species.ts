@@ -16,25 +16,27 @@ export interface SpeciesDef {
 }
 
 // The monster family. Order is the order the collection shows them in.
+// Only three can hatch from day one; the rest open up slowly with lifetime steps (about 8 000 a day:
+// Nubs in ~4 days, Spike in ~a month, the rares over months, Twinkle after a year or so).
 export const SPECIES: SpeciesDef[] = [
   { id: 'mochi', name: 'Mochi', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Morning walker' },
   { id: 'pip', name: 'Pip', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Night owl' },
   { id: 'bop', name: 'Bop', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Steady pacer' },
-  { id: 'nubs', name: 'Nubs', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Sleepy cuddler' },
-  { id: 'mossy', name: 'Mossy', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Park explorer' },
-  { id: 'drip', name: 'Drip', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Loves long walks by water' },
-  { id: 'pebble', name: 'Pebble', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Slow but never stops' },
-  { id: 'bloop', name: 'Bloop', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Puddle-jumper' },
-  { id: 'spike', name: 'Spike', rarity: 'starter', unlock: { kind: 'starter' }, blurb: 'Summer sprinter' },
-  { id: 'fizz', name: 'Fizz', rarity: 'rare', unlock: { kind: 'steps', steps: 250_000 }, blurb: 'Streak keeper' },
-  { id: 'puff', name: 'Puff', rarity: 'rare', unlock: { kind: 'steps', steps: 300_000 }, blurb: 'Rainy-day stroller' },
-  { id: 'buzz', name: 'Buzz', rarity: 'rare', unlock: { kind: 'steps', steps: 350_000 }, blurb: 'Busy flower-hopper' },
-  { id: 'shroom', name: 'Shroom', rarity: 'rare', unlock: { kind: 'steps', steps: 400_000 }, blurb: 'Forest trail fan' },
-  { id: 'inky', name: 'Inky', rarity: 'rare', unlock: { kind: 'streak', days: 30 }, blurb: 'Shy beach-walker' },
-  { id: 'jelly', name: 'Jelly', rarity: 'epic', unlock: { kind: 'steps', steps: 500_000 }, blurb: 'Glows on night walks' },
-  { id: 'gem', name: 'Gem', rarity: 'epic', unlock: { kind: 'steps', steps: 600_000 }, blurb: 'Hill climber' },
-  { id: 'ember', name: 'Ember', rarity: 'epic', unlock: { kind: 'steps', steps: 750_000 }, blurb: 'Speed walker' },
-  { id: 'twinkle', name: 'Twinkle', rarity: 'epic', unlock: { kind: 'steps', steps: 1_000_000 }, blurb: 'The rarest light in the meadow' },
+  { id: 'nubs', name: 'Nubs', rarity: 'starter', unlock: { kind: 'steps', steps: 30_000 }, blurb: 'Sleepy cuddler' },
+  { id: 'mossy', name: 'Mossy', rarity: 'starter', unlock: { kind: 'steps', steps: 60_000 }, blurb: 'Park explorer' },
+  { id: 'drip', name: 'Drip', rarity: 'starter', unlock: { kind: 'steps', steps: 100_000 }, blurb: 'Loves long walks by water' },
+  { id: 'pebble', name: 'Pebble', rarity: 'starter', unlock: { kind: 'steps', steps: 150_000 }, blurb: 'Slow but never stops' },
+  { id: 'bloop', name: 'Bloop', rarity: 'starter', unlock: { kind: 'steps', steps: 200_000 }, blurb: 'Puddle-jumper' },
+  { id: 'spike', name: 'Spike', rarity: 'starter', unlock: { kind: 'steps', steps: 260_000 }, blurb: 'Summer sprinter' },
+  { id: 'fizz', name: 'Fizz', rarity: 'rare', unlock: { kind: 'steps', steps: 400_000 }, blurb: 'Streak keeper' },
+  { id: 'puff', name: 'Puff', rarity: 'rare', unlock: { kind: 'steps', steps: 550_000 }, blurb: 'Rainy-day stroller' },
+  { id: 'buzz', name: 'Buzz', rarity: 'rare', unlock: { kind: 'steps', steps: 750_000 }, blurb: 'Busy flower-hopper' },
+  { id: 'shroom', name: 'Shroom', rarity: 'rare', unlock: { kind: 'steps', steps: 1_000_000 }, blurb: 'Forest trail fan' },
+  { id: 'inky', name: 'Inky', rarity: 'rare', unlock: { kind: 'streak', days: 45 }, blurb: 'Shy beach-walker' },
+  { id: 'jelly', name: 'Jelly', rarity: 'epic', unlock: { kind: 'steps', steps: 1_400_000 }, blurb: 'Glows on night walks' },
+  { id: 'gem', name: 'Gem', rarity: 'epic', unlock: { kind: 'steps', steps: 1_800_000 }, blurb: 'Hill climber' },
+  { id: 'ember', name: 'Ember', rarity: 'epic', unlock: { kind: 'steps', steps: 2_400_000 }, blurb: 'Speed walker' },
+  { id: 'twinkle', name: 'Twinkle', rarity: 'epic', unlock: { kind: 'steps', steps: 3_200_000 }, blurb: 'The rarest light in the meadow' },
   { id: 'gourdy', name: 'Gourdy', rarity: 'rare', unlock: { kind: 'event', event: 'Harvest Walk' }, blurb: 'Autumn visitor' },
   { id: 'frost', name: 'Frost', rarity: 'epic', unlock: { kind: 'event', event: 'Winter Wander' }, blurb: 'Winter visitor' },
 ];

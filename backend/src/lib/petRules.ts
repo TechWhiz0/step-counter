@@ -13,8 +13,6 @@ export interface Traits {
   cheeks: boolean;
 }
 
-export const GOLDEN_ITEMS = ['cap', 'bow', 'glasses', 'flower', 'scarf', 'headphones', 'leaf', 'balloon'] as const;
-
 export function cappedTotal(hourly: number[]): number {
   return hourly.reduce((sum, h) => sum + Math.min(Math.max(h, 0), rules.hourlyCap), 0);
 }
@@ -110,19 +108,6 @@ export function traitsFor({ seed, hourlySums, avgDailySteps, bestStreak }: Trait
     markings: Math.min(6, 1 + Math.floor(bestStreak / 3)),
     size: avgDailySteps >= 9000 ? 'large' : avgDailySteps >= 5000 ? 'medium' : 'small',
   };
-}
-
-// Hidden golden step numbers for one day, between 1,000 and 130% of the goal.
-export function goldenTargets(seed: number, goal: number): number[] {
-  const r = rng(seed);
-  const max = Math.max(2000, Math.round(goal * 1.3));
-  const targets = new Set<number>();
-  while (targets.size < rules.goldenStepsPerDay) targets.add(1000 + Math.floor(r() * (max - 1000)));
-  return [...targets].sort((a, b) => a - b);
-}
-
-export function randomItem(seed: number): string {
-  return pick(rng(seed), GOLDEN_ITEMS);
 }
 
 // Energy, 5-100: how well-walked the pet has been lately.

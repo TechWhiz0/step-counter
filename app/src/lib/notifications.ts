@@ -1,11 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
-import { api } from './api';
+import { api, tokenStore } from './api';
 import { dayKey } from './dates';
 import { itemLabel } from './items';
 import { getJson, setJson } from './localDb';
 import { energyLevel } from './petState';
-import type { LeagueBoard, MonstersResult, QuestsResult, Surprise, SyncResult, User } from './types';
+import type { LeagueBoard, MonstersResult, QuestsResult, TodayState, User } from './types';
 
 // Local notifications: the phone schedules and shows them itself, no push server needed.
 // Everything is worked out after each sync (the app syncs on open and every ~30 min in the background).
@@ -13,11 +13,12 @@ import type { LeagueBoard, MonstersResult, QuestsResult, Surprise, SyncResult, U
 //   Reminders (scheduled ahead, replaced on every sync): morning hello, evening steps, streak at risk,
 //   low energy, league last day.
 //   Alerts (shown once when something happens): goal reached, quest ready, hatched/evolved,
-//   new unlock, golden step. Alerts are skipped while the app is open: you can already see it.
+//   new unlock. Alerts are skipped while the app is open: you can already see it.
+// Nothing is scheduled without a signed-in token, so a sync finishing after sign-out stays silent.
 
 const CHANNEL = 'pet';
 
-export type NotifKind = 'morning' | 'evening' | 'streak' | 'energy' | 'league' | 'goal' | 'quest' | 'growth' | 'unlock' | 'golden';
+export type NotifKind = 'morning' | 'evening' | 'streak' | 'energy' | 'league' | 'goal' | 'quest' | 'growth' | 'unlock';
 
 export const NOTIF_KINDS: { kind: NotifKind; label: string; detail: string }[] = [
   { kind: 'morning', label: 'Good morning', detail: '8 am hello from your pet' },
@@ -25,10 +26,9 @@ export const NOTIF_KINDS: { kind: NotifKind; label: string; detail: string }[] =
   { kind: 'streak', label: 'Streak at risk', detail: '9 pm before a streak breaks' },
   { kind: 'energy', label: 'Low energy', detail: 'When your pet gets tired or weak' },
   { kind: 'goal', label: 'Goal reached', detail: 'When you hit today’s goal' },
-  { kind: 'quest', label: 'Quest ready', detail: 'A treat is waiting to be claimed' },
+  { kind: 'quest', label: 'Quest ready', detail: 'A finished quest to claim' },
   { kind: 'growth', label: 'Hatched or evolved', detail: 'Big moments for your pet' },
   { kind: 'unlock', label: 'New unlocks', detail: 'Closet items and rare monsters' },
-  { kind: 'golden', label: 'Golden steps', detail: 'Your pet found something' },
   { kind: 'league', label: 'League last day', detail: 'Sunday, your rank and zone' },
 ];
 
@@ -92,6 +92,7 @@ const at = (base: Date, hour: number, minute = 0) => {
 
 // One pending notification per reminder kind. Re-running with the same content keeps it; anything else replaces it.
 async function setReminder(kind: NotifKind, when: Date | null, title: string, body: string, url: string) {
+  if (!(await tokenStore.get())) return;
   const key = `reminder.${kind}`;
   const saved = await getJson<{ id: string; when: number; body: string }>(key);
   const wanted = when && when.getTime() > Date.now() ? when : null;
@@ -110,6 +111,7 @@ async function cancelReminder(kind: NotifKind) {
 
 // Shows an alert at most once per `stamp` (e.g. once per day, once per stage).
 async function alertOnce(kind: NotifKind, stamp: string, title: string, body: string, url: string) {
+  if (!(await tokenStore.get())) return;
   const key = `alert.${kind}`;
   if ((await getJson<string>(key)) === stamp) return;
   await setJson(key, stamp);
@@ -124,7 +126,7 @@ const steps = (n: number) => n.toLocaleString('en');
 
 // ---- the one entry point, called after every sync ----
 
-export async function refreshNotifications(result: SyncResult) {
+export async function refreshNotifications(result: TodayState) {
   const user = await getJson<User>('user');
   // Admin accounts don't walk in the app, so they get no walker notifications.
   if (user?.role === 'admin') return cancelAll();
@@ -155,7 +157,7 @@ export async function refreshNotifications(result: SyncResult) {
       const when = now.getHours() < 8 ? at(now, 8) : at(tomorrow, 8);
       const body =
         level === 'weak' ? `${name} woke up feeling weak. A walk today will help a lot.` : `${name} is awake and ready for a walk. Let’s go!`;
-      return setReminder('morning', when, 'Good morning! ☀️', body, '/');
+      return setReminder('morning', when, 'Good morning', body, '/');
     }),
     // Evening reminder: 7 pm while under goal.
     run('evening', () =>
@@ -172,7 +174,7 @@ export async function refreshNotifications(result: SyncResult) {
       setReminder(
         'streak',
         left && streak > 0 ? at(now, 21) : null,
-        `Your ${streak}-day streak ends at midnight 🔥`,
+        `Your ${streak}-day run ends at midnight`,
         `Walk ${steps(left)} more steps to keep it going.`,
         '/',
       ),
@@ -185,33 +187,31 @@ export async function refreshNotifications(result: SyncResult) {
       return setReminder(
         'energy',
         low && when ? when : null,
-        level === 'weak' ? `${name} needs energy! ⚡` : `${name} is getting tired`,
+        level === 'weak' ? `${name} needs a walk` : `${name} is getting tired`,
         level === 'weak' ? 'After the missed days they feel weak. Every walk gives energy back.' : 'A walk today will perk them right up.',
         '/',
       );
     }),
     // Goal reached.
-    run('goal', () => (total >= goal ? alertOnce('goal', today, 'Goal reached! 🎉', `${steps(total)} steps today. ${name} is bouncing with joy!`, '/') : Promise.resolve())),
+    run('goal', () => (total >= goal ? alertOnce('goal', today, 'Goal reached', `${steps(total)} steps today. ${name} is bouncing with joy!`, '/') : Promise.resolve())),
     // Hatched or evolved: pet.seenStage lags until the app shows the reveal.
     run('growth', () => {
       if (!pet || pet.stage === pet.seenStage) return Promise.resolve();
-      const title = pet.stage === 'baby' ? 'Your egg hatched! 🐣' : pet.stage === 'adult' ? `${pet.name} evolved! ✨` : `${pet.name} grew up a bit!`;
+      const title = pet.stage === 'baby' ? 'Your egg hatched' : pet.stage === 'adult' ? `${pet.name} grew up` : `${pet.name} grew up a bit!`;
       return alertOnce('growth', `${pet.id}:${pet.stage}`, title, 'Open Step Pet to see who they’ve become.', '/');
     }),
     // New closet items from lifetime milestones.
     run('unlock', async () => {
       for (const item of result.unlockedItems ?? []) {
-        await alertOnce('unlock', `item:${item}`, 'New closet item! 🎁', `You unlocked the ${itemLabel(item)}. Put it on in the Closet.`, '/closet');
+        await alertOnce('unlock', `item:${item}`, 'New in the closet', `You unlocked the ${itemLabel(item)}. Put it on in the Closet.`, '/closet');
       }
       await checkMonsterUnlocks(result.lifetimeSteps);
     }),
-    // Golden steps found on today's walk.
-    run('golden', () => notifySurprises(name, result.surprises)),
     // Quests finished but not yet claimed.
     run('quest', async () => {
       const { quests } = await api<QuestsResult>('/quests');
       const ready = quests.filter((q) => q.done && !q.claimed).map((q) => q.id);
-      if (ready.length) await alertOnce('quest', `${today}:${ready.join(',')}`, 'Quest complete! 🍓', `A treat is waiting for you. Claim it in Daily quests.`, '/');
+      if (ready.length) await alertOnce('quest', `${today}:${ready.join(',')}`, 'Quest done', `Claim it on Today.`, '/');
     }),
     // League last day: Sunday 6 pm, with where you stand.
     run('league', () => (now.getDay() === 0 ? leagueReminder(now) : setReminder('league', null, '', '', '/leagues'))),
@@ -233,7 +233,7 @@ async function checkMonsterUnlocks(lifetime: number | undefined) {
   }
   for (const m of catalog.list) {
     if (last < m.steps && lifetime >= m.steps) {
-      await alertOnce('unlock', `monster:${m.name}`, `${m.name} unlocked! 🥚`, `${m.name} can now hatch from your next egg.`, '/unlocks');
+      await alertOnce('unlock', `monster:${m.name}`, `${m.name} can hatch now`, `${m.name} can now hatch from your next egg.`, '/guide');
     }
   }
 }
@@ -246,21 +246,7 @@ async function leagueReminder(now: Date) {
   if (rank && board.promoteTop && rank <= board.promoteTop) body = `You're #${rank} in ${tier}, in the promotion zone. Hold on today!`;
   else if (rank && board.dropFrom && rank >= board.dropFrom) body = `You're #${rank} in ${tier}, in the drop zone. A walk today could save you.`;
   else if (rank && board.promoteTop) body = `You're #${rank} in ${tier}. Top ${board.promoteTop} move up tonight!`;
-  return setReminder('league', at(now, 18), 'League ends tonight 🏆', body, '/leagues');
-}
-
-export async function notifySurprises(petName: string, surprises: Surprise[]) {
-  if (AppState.currentState === 'active') return; // the home screen shows them
-  for (const s of surprises) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `${petName} found something! ✨`,
-        body: `Golden step ${s.step.toLocaleString()}: a ${itemLabel(s.item)}. Open the app to see it.`,
-        data: { kind: 'golden', url: '/closet' },
-      },
-      trigger: Platform.OS === 'android' ? { channelId: CHANNEL } : null,
-    });
-  }
+  return setReminder('league', at(now, 18), 'League ends tonight', body, '/leagues');
 }
 
 // Logging out or switching to an admin account clears every scheduled reminder.

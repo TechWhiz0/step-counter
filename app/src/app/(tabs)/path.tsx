@@ -1,227 +1,188 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
-import { chapterFor, type PathNode } from '@/components/GrowthPath';
-import { Icon } from '@/components/icons';
-import { PetArt, PetView } from '@/components/PetView';
-import { dialog } from '@/components/Dialog';
-import { Bar, fonts, Muted, useColors } from '@/components/ui';
+import { RefreshControl, View } from 'react-native';
+import Svg, { Circle, Path as SvgPath } from 'react-native-svg';
+import { ErrorText, Loading, Meta, PaperScreen, Rule, T, fmt, fonts, useColors } from '@/components/paper';
 import { api } from '@/lib/api';
-import { lookNow, useDayPhase } from '@/lib/petState';
-import { haptic } from '@/lib/feel';
-import { cachedSync } from '@/lib/sync';
-import type { Pet } from '@/lib/types';
+import { lastDays } from '@/lib/dates';
+import { useSession } from '@/lib/session';
+import type { Pet, Stage } from '@/lib/types';
 
-// Node positions from the design (left, top of each stop in a 390-wide frame), spaced evenly enough
-// that whichever stop is current (bigger, with a "YOU ARE HERE" label above) never overlaps its neighbours.
-const SPOTS: { x: number; y: number }[] = [
-  { x: 155, y: 30 },
-  { x: 95, y: 165 },
-  { x: 140, y: 300 },
-  { x: 228, y: 415 },
-  { x: 165, y: 520 },
-  { x: 70, y: 610 },
-];
-const FIELD_H = 710;
+const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const STAGES: Stage[] = ['egg', 'baby', 'teen', 'adult'];
 
-function Chest() {
+interface HistoryDay {
+  day: string;
+  total: number;
+  goalMet: boolean | null;
+}
+
+function MetMark() {
+  const c = useColors();
   return (
-    <Svg width={38} height={34} viewBox="0 0 38 34">
-      <Rect x={3} y={12} width={32} height={20} rx={4} fill="#C9A26B" />
-      <Path d="M3 16a10 10 0 0 1 10-10h12a10 10 0 0 1 10 10z" fill="#B08650" />
-      <Rect x={15} y={14} width={8} height={10} rx={2} fill="#FFC233" />
+    <Svg width={20} height={20} viewBox="0 0 20 20" accessibilityLabel="goal met">
+      <Circle cx={10} cy={10} r={8.5} fill="none" stroke={c.sageSoft} strokeWidth={1.4} />
+      <SvgPath d="M6.2 10.4l2.6 2.4 5-5.4" fill="none" stroke={c.sageSoft} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
 
-function Mystery() {
-  return (
-    <Svg width={62} height={62} viewBox="0 0 120 120">
-      <Circle cx={33} cy={35} r={12} fill="#D8CCF5" />
-      <Circle cx={87} cy={35} r={12} fill="#D8CCF5" />
-      <Path d="M18 74c0-25 19-44 42-44s42 19 42 44-19 34-42 34-42-9-42-34z" fill="#D8CCF5" />
-      <SvgText x={60} y={88} textAnchor="middle" fontFamily={fonts.display} fontSize={40} fill="#8B5CF6">
-        ?
-      </SvgText>
-    </Svg>
-  );
-}
-
-function Stop({ node, x, y }: { node: PathNode; x: number; y: number }) {
+export default function PathScreen() {
   const c = useColors();
-  const lockedFace = c.disabledFace;
-  const lockedEdge = c.shadow;
-
-  if (node.kind === 'final' && node.state !== 'done') {
-    return (
-      <View accessibilityLabel={`Locked: ${node.label}`} style={[styles.abs, { left: x, top: y }]}>
-        <View style={[styles.final, { backgroundColor: c.grapeSoft, borderColor: '#C9B5FF' }]}>
-          <Mystery />
-        </View>
-      </View>
-    );
-  }
-
-  if (node.state === 'current') {
-    return (
-      <View accessibilityLabel={`Current: ${node.label}`} style={[styles.abs, { left: x - 6, top: y - 22, alignItems: 'center', gap: 6 }]}>
-        <View style={[styles.here, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={[styles.hereText, { color: c.accent }]}>YOU ARE HERE</Text>
-        </View>
-        <View style={[styles.halo, { backgroundColor: '#CFEFDB' }]}>
-          <View style={[styles.node, styles.nodeBig, { backgroundColor: c.accent, borderBottomColor: c.accentDeep }]}>
-            {node.kind === 'chest' ? <Chest /> : <Icon.feet size={34} color="#FFFFFF" />}
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  const done = node.state === 'done';
-  return (
-    <View accessibilityLabel={`${done ? 'Done' : 'Locked'}: ${node.label}`} style={[styles.abs, { left: x, top: y }]}>
-      <View
-        style={[
-          styles.node,
-          node.kind === 'chest' && { borderRadius: 22 },
-          done ? { backgroundColor: c.gold, borderBottomColor: '#E0A000' } : { backgroundColor: lockedFace, borderBottomColor: lockedEdge },
-        ]}
-      >
-        {done ? (
-          <Icon.check size={30} color="#5C4300" width={3.2} />
-        ) : node.kind === 'chest' ? (
-          <Chest />
-        ) : (
-          <Icon.lock size={26} color={c.faint} width={2.6} />
-        )}
-      </View>
-    </View>
-  );
-}
-
-export default function GrowthPathScreen() {
-  const c = useColors();
-  const phase = useDayPhase();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { user } = useSession();
+  const [days, setDays] = useState<HistoryDay[] | null>(null);
+  const [month, setMonth] = useState<HistoryDay[]>([]);
   const [pet, setPet] = useState<Pet | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { pet: fresh } = await api<{ pet: Pet | null }>('/pet');
-      if (fresh) setPet(fresh);
-    } catch {
-      const cached = await cachedSync();
-      if (cached?.pet) setPet((p) => p ?? cached.pet);
+      const [h, p] = await Promise.all([api<{ days: HistoryDay[] }>('/steps/history?days=30'), api<{ pet: Pet | null }>('/pet')]);
+      setMonth(h.days);
+      const by = new Map(h.days.map((d) => [d.day, d]));
+      setDays(lastDays(7).map((d) => by.get(d.day) ?? { day: d.day, total: 0, goalMet: null }));
+      setPet(p.pet);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      cachedSync().then((s) => s?.pet && setPet((p) => p ?? s.pet));
       void load();
     }, [load]),
   );
 
-  if (!pet) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg }}>
-        <Muted>Finding your path…</Muted>
-      </View>
-    );
-  }
-
-  const ch = chapterFor(pet);
-  // Scale the 390-wide design to the screen, keeping stops inside the gutters.
-  const k = Math.min(1.15, (width - 36) / 354);
-  const fx = (x: number) => 18 + (x - 18) * k;
+  const goal = user?.dailyGoal ?? 6000;
+  const week = days ?? [];
+  const weekTotal = week.reduce((s, d) => s + d.total, 0);
+  const closed = week.slice(0, -1);
+  const met = closed.filter((d) => d.goalMet ?? d.total >= goal).length;
+  const scale = Math.max(goal * 1.6, ...week.map((d) => d.total));
+  const first = week[0]?.day;
+  const range = first ? `${MONTH[Number(first.slice(5, 7)) - 1]} ${Number(first.slice(8))} – ${Number(week[6]?.day.slice(8))}` : '';
+  const monthTotal = month.reduce((s, d) => s + d.total, 0);
+  const best = month.reduce((b, d) => (d.total > b.total ? d : b), { day: '', total: 0 } as HistoryDay);
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 110 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await load();
-              setRefreshing(false);
-            }}
-            tintColor={c.accent}
-          />
-        }
-      >
-        <View style={[styles.banner, { backgroundColor: c.accent, borderBottomColor: c.accentDeep }]}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[styles.chapter, { color: '#CFF2DC' }]}>
-              Chapter {ch.chapter} · {ch.chapterName}
-            </Text>
-            <Text style={[styles.bannerTitle, { color: c.onAccent }]}>{ch.title}</Text>
+    <PaperScreen
+      title="Path"
+      right={<T v="small">{range}</T>}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+          tintColor={c.ink}
+        />
+      }
+    >
+      <View style={{ paddingHorizontal: 28, paddingTop: 18, gap: 10 }}>
+        <T v="display">Seven days,{'\n'}one long walk.</T>
+        <T color={c.inkSoft}>
+          {fmt(weekTotal)} steps. Goal met {met} of {closed.length} days{week.length ? ', today still going.' : '.'}
+        </T>
+        <ErrorText message={error} />
+      </View>
+
+      {!days && !error && <Loading rows={7} />}
+      <View style={{ marginHorizontal: 28, marginTop: 18, display: days ? 'flex' : 'none' }}>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Meta>goal {fmt(goal)}</Meta>
+        </View>
+        <View style={{ marginTop: 6 }}>
+          {week.map((d, i) => {
+            const today = i === week.length - 1;
+            const date = new Date(`${d.day}T12:00:00`);
+            const isMet = !today && (d.goalMet ?? d.total >= goal);
+            return (
+              <View
+                key={d.day}
+                accessible
+                accessibilityLabel={`${DAY[date.getDay()]} ${date.getDate()}: ${fmt(d.total)} steps${isMet ? ', goal met' : today ? ', today' : ''}`}
+                style={{ flexDirection: 'row', alignItems: 'center', height: 40, borderBottomWidth: 1, borderBottomColor: c.rule }}
+              >
+                <T style={{ width: 58, color: today ? c.ink : c.muted, fontFamily: today ? fonts.bodyBold : fonts.body }}>
+                  {DAY[date.getDay()]} {date.getDate()}
+                </T>
+                <View style={{ flex: 1, height: 12, justifyContent: 'center' }}>
+                  <View style={{ height: 4, width: `${Math.min(100, (d.total / scale) * 100)}%`, backgroundColor: today ? c.accent : c.ink, borderRadius: 2 }} />
+                  <View style={{ position: 'absolute', left: `${(goal / scale) * 100}%`, top: -14, bottom: -14, width: 1, backgroundColor: c.ruleStrong }} />
+                </View>
+                <T style={{ width: 64, textAlign: 'right', fontFamily: today ? fonts.bodyBold : fonts.body }}>{fmt(d.total)}</T>
+                <View style={{ width: 34, alignItems: 'flex-end' }}>{isMet ? <MetMark /> : today ? <T v="small" color={c.accent}>now</T> : null}</View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {pet && (
+        <View style={{ marginHorizontal: 28, marginTop: 28, gap: 14 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Meta>{pet.name}'s path</Meta>
+            <T v="small">{fmt(pet.growth)} walked</T>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Chapter guide"
-            onPress={() => {
-              haptic.tap();
-              dialog(
-                `Chapter ${ch.chapter} · ${ch.chapterName}`,
-                `Every step you walk helps ${pet.name} grow. Reach each stop on the path to open the next one. The chest holds a surprise, and the last stop is ${pet.name}'s next form.`,
-                [{ text: 'Got it' }],
-                { art: <PetArt look={lookNow(pet, phase)} size={96} /> },
+          <View style={{ flexDirection: 'row', alignItems: 'center' }} accessible accessibilityLabel={`${pet.name} is a ${pet.stage}`}>
+            {STAGES.map((s, i) => {
+              const at = STAGES.indexOf(pet.stage);
+              const done = i < at;
+              const now = i === at;
+              return (
+                <View key={s} style={{ flexDirection: 'row', alignItems: 'center', flex: i < 3 ? 1 : 0 }}>
+                  <T
+                    v="small"
+                    style={[
+                      { fontSize: 12.5 },
+                      done && { textDecorationLine: 'line-through', color: c.muted },
+                      now && { fontFamily: fonts.bodyBold, color: c.ink, textDecorationLine: 'underline' },
+                    ]}
+                  >
+                    {s}
+                  </T>
+                  {i < 3 && (
+                    <View style={{ flex: 1, height: 1, marginHorizontal: 8, backgroundColor: i < at ? c.ink : c.ruleStrong }}>
+                      {now && <View style={{ position: 'absolute', left: 0, top: -1, height: 3, width: `${Math.round(pet.stageProgress * 100)}%`, backgroundColor: c.accent }} />}
+                    </View>
+                  )}
+                </View>
               );
-            }}
-            style={styles.guide}
-          >
-            <Icon.book size={20} color="#FFFFFF" />
-          </Pressable>
-        </View>
-
-        <View style={{ height: FIELD_H * Math.max(1, k * 0.95), marginTop: 22 }}>
-          {ch.nodes.map((n, i) => (
-            <Stop key={i} node={n} x={fx(SPOTS[i].x)} y={SPOTS[i].y * Math.max(1, k * 0.95)} />
-          ))}
-          <View pointerEvents="box-none" style={{ position: 'absolute', right: 8, top: 330 }}>
-            <PetView look={lookNow(pet, phase)} size={150} onPet={() => {}} />
+            })}
           </View>
-        </View>
-      </ScrollView>
-
-      {ch.current ? (
-        <View style={[styles.next, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text style={[styles.nextTitle, { color: c.ink }]}>
-              Next: {ch.current.kind === 'steps' ? `${ch.current.at.toLocaleString('en')} steps` : ch.current.label}
-            </Text>
-            <Bar value={ch.legProgress} height={12} track={c.accentSoft} />
-          </View>
-          <Text style={[styles.left, { color: c.ink }]}>{ch.left.toLocaleString('en')} left</Text>
-        </View>
-      ) : (
-        <View style={[styles.next, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={[styles.nextTitle, { color: c.ink, flex: 1 }]}>{pet.name} finished the path. Start a new egg any time.</Text>
+          <T>
+            {pet.nextStage
+              ? `${fmt(pet.stepsToNextStage)} more steps until ${pet.name} ${pet.nextStage === 'baby' ? 'hatches' : pet.nextStage === 'teen' ? 'grows up a bit' : 'grows up'}.${pet.nextStage === 'adult' ? ' Their form is decided by the last two weeks of walks.' : ''}`
+              : `${pet.name} is grown up. A new monster can join from Today whenever you like.`}
+          </T>
         </View>
       )}
-    </View>
+
+      {month.length > 0 && (
+        <View style={{ marginHorizontal: 28, marginTop: 26, gap: 12 }}>
+          <Rule dashed />
+          <Meta>Last 30 days</Meta>
+          <View style={{ flexDirection: 'row' }}>
+            {[
+              ['walked', fmt(monthTotal)],
+              ['a day', fmt(monthTotal / Math.max(1, month.length))],
+              ['best day', fmt(best.total)],
+            ].map(([label, value]) => (
+              <View key={label} style={{ flex: 1 }}>
+                <T v="num" style={{ fontSize: 17 }}>
+                  {value}
+                </T>
+                <T v="small">{label}</T>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+    </PaperScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  abs: { position: 'absolute' },
-  banner: { marginHorizontal: 18, borderRadius: 22, borderBottomWidth: 5, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  chapter: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
-  bannerTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 26, includeFontPadding: false },
-  guide: { width: 44, height: 44, borderRadius: 14, borderWidth: 2, borderColor: '#2EA862', backgroundColor: '#0F7A3E', alignItems: 'center', justifyContent: 'center' },
-  node: { width: 72, height: 72, borderRadius: 36, borderBottomWidth: 6, alignItems: 'center', justifyContent: 'center' },
-  nodeBig: { width: 84, height: 84, borderRadius: 42 },
-  halo: { padding: 8, borderRadius: 60 },
-  here: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12, borderWidth: 2 },
-  hereText: { fontFamily: fonts.bodyHeavy, fontSize: 13 },
-  final: { width: 96, height: 80, borderRadius: 26, borderWidth: 3, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  next: { position: 'absolute', left: 18, right: 18, bottom: 14, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 18, borderWidth: 2, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  nextTitle: { fontFamily: fonts.bodyHeavy, fontSize: 14 },
-  left: { fontFamily: fonts.display, fontSize: 16, includeFontPadding: false },
-});

@@ -1,29 +1,29 @@
 import { router } from 'expo-router';
-import { useState, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { EggArt, EggTile, GuideBubble, type EggKind } from '@/components/AuthArt';
-import { Button, ErrorText, Field, Screen, useColors } from '@/components/ui';
+import { useState } from 'react';
+import { View } from 'react-native';
+import { Monster } from '@/components/Monster';
+import { Button, DeskScreen, ErrorText, Field, Footer, T, useColors } from '@/components/paper';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
-import type { Palette } from '@/lib/theme';
 import { syncSteps } from '@/lib/sync';
 
-export default function NewEgg() {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+// Once a pet is grown up a new monster joins, already hatched. Only the very first pet is an egg.
+// Who comes is picked from the monsters the walker has unlocked; the grown-up moves to "Pets you raised".
+export default function NewMonster() {
+  const c = useColors();
   const [name, setName] = useState('');
-  const [egg, setEgg] = useState<EggKind>('confetti');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function create() {
+  async function welcome() {
+    if (!name.trim()) return setError('Give them a name.');
     setBusy(true);
     setError(null);
     try {
-      await api('/pet/new-egg', { body: { name: name.trim() } });
+      await api('/pet/new', { body: { name: name.trim() } });
       await syncSteps().catch(() => null);
       haptic.celebrate();
-      router.dismissTo('/(tabs)');
+      router.back();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -32,29 +32,25 @@ export default function NewEgg() {
   }
 
   return (
-    <Screen>
-      <GuideBubble text="Your grown-up monster moves to your collection. Pick a new egg! It hatches after 5,000 steps." />
-      <View accessibilityRole="radiogroup" accessibilityLabel="Choose an egg" style={styles.row}>
-        {(['confetti', 'meadow', 'starry'] as const).map((k) => (
-          <View key={k} style={{ flex: 1 }}>
-            <EggTile kind={k} label={k[0].toUpperCase() + k.slice(1)} on={egg === k} onPress={() => setEgg(k)} />
-          </View>
-        ))}
-      </View>
-      <View style={styles.nameRow}>
-        <EggArt kind={egg} size={72} />
-        <View style={{ flex: 1 }}>
-          <Field label="Name the new egg" value={name} onChangeText={setName} maxLength={20} />
+    <DeskScreen
+      back
+      keyboard
+      right="NEW FRIEND"
+      footer={
+        <Footer>
+          <Button label="Welcome them" onPress={welcome} busy={busy} />
+        </Footer>
+      }
+    >
+      <View style={{ paddingHorizontal: 32, paddingTop: 36, gap: 12 }}>
+        <T v="display">Someone new{'\n'}is coming.</T>
+        <T color={c.inkSoft}>Your grown-up pet moves to Pets you raised. A new monster joins you today, picked from the ones you've unlocked by walking.</T>
+        <View style={{ alignItems: 'center', marginVertical: 20 }}>
+          <Monster species="mochi" size={124} ghost label="A new monster, still a surprise" />
         </View>
+        <Field label="A name for them" value={name} onChangeText={setName} maxLength={20} placeholder="Pip" style={{ fontSize: 20 }} onSubmitEditing={welcome} returnKeyType="done" />
+        <ErrorText message={error} />
       </View>
-      <ErrorText message={error} />
-      <Button label="Hatch this one" onPress={create} busy={busy} disabled={!name.trim()} />
-    </Screen>
+    </DeskScreen>
   );
 }
-
-const makeStyles = (colors: Palette) =>
-  StyleSheet.create({
-  row: { flexDirection: 'row', gap: 8 },
-  nameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, backgroundColor: colors.bg },
-});

@@ -52,7 +52,7 @@ export function faceFor(pet: Pet, phase: DayPhase): FaceMood {
 }
 
 // The pet as it should be drawn right now.
-export function lookNow<T extends Pet>(pet: T, phase: DayPhase): T & { mood: FaceMood } {
+export function lookNow<T extends Pet>(pet: T, phase: DayPhase): Omit<T, 'mood'> & { mood: FaceMood } {
   return { ...pet, mood: faceFor(pet, phase) };
 }
 

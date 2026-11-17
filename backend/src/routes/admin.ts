@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import { Types } from 'mongoose';
 import { z } from 'zod';
-import { config } from '../config.js';
+import { config, rules } from '../config.js';
 import { requireAdmin, requireAuth } from '../lib/auth.js';
-import { addDays, dayKey, weekStart } from '../lib/dates.js';
+import { addDays, dayKey } from '../lib/dates.js';
 import { catalog, SPECIES } from '../lib/species.js';
-import { Group, MonsterSetting, Pet, StepDay, User } from '../models/index.js';
+import { MonsterSetting, Pet, StepDay, User } from '../models/index.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Admin accounts run the app, they don't walk in it: keep them out of every walker number and list.
+const WALKER = { role: { $ne: 'admin' as const } };
+const adminIds = async () => (await User.find({ role: 'admin' }).select('_id').lean()).map((u) => u._id);
 
 adminRouter.get('/overview', async (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days ?? 7) || 7, 1), 30);
@@ -18,44 +22,35 @@ adminRouter.get('/overview', async (req, res) => {
   const from = addDays(today, -(days - 1));
   const since = new Date(Date.now() - days * 86_400_000);
   const rareIds = SPECIES.filter((s) => s.rarity !== 'starter').map((s) => s.id);
+  const notAdmin = { $nin: await adminIds() };
 
   const [todayStats, perDay, eggsHatched, rareUnlocks, bySpecies, flagged, users] = await Promise.all([
     StepDay.aggregate<{ walkers: number; avg: number }>([
-      { $match: { day: today, total: { $gt: 0 } } },
+      { $match: { day: today, total: { $gt: 0 }, userId: notAdmin } },
       { $group: { _id: null, walkers: { $sum: 1 }, avg: { $avg: '$total' } } },
     ]),
     StepDay.aggregate<{ _id: string; steps: number; walkers: number }>([
-      { $match: { day: { $gte: from, $lte: today } } },
+      { $match: { day: { $gte: from, $lte: today }, userId: notAdmin } },
       { $group: { _id: '$day', steps: { $sum: '$cappedTotal' }, walkers: { $sum: { $cond: [{ $gt: ['$total', 0] }, 1, 0] } } } },
       { $sort: { _id: 1 } },
     ]),
-    Pet.countDocuments({ hatchedAt: { $gte: since } }),
-    Pet.countDocuments({ hatchedAt: { $gte: since }, species: { $in: rareIds } }),
+    Pet.countDocuments({ hatchedAt: { $gte: since }, userId: notAdmin }),
+    Pet.countDocuments({ hatchedAt: { $gte: since }, species: { $in: rareIds }, userId: notAdmin }),
     Pet.aggregate<{ _id: string; count: number }>([
-      { $match: { hatchedAt: { $ne: null } } },
+      { $match: { hatchedAt: { $ne: null }, userId: notAdmin } },
       { $group: { _id: '$species', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]),
-    User.countDocuments({ flagged: true }),
-    User.countDocuments(),
+    User.countDocuments({ flagged: true, ...WALKER }),
+    User.countDocuments(WALKER),
   ]);
 
-  // Top groups by capped steps this week.
-  const week = weekStart(today);
-  const groups = await Group.find().select('name members').lean();
-  const memberIds = [...new Set(groups.flatMap((g) => g.members.map(String)))].map((id) => new Types.ObjectId(id));
-  const stepsBy = new Map(
-    (
-      await StepDay.aggregate<{ _id: Types.ObjectId; steps: number }>([
-        { $match: { userId: { $in: memberIds }, day: { $gte: week, $lte: today } } },
-        { $group: { _id: '$userId', steps: { $sum: '$cappedTotal' } } },
-      ])
-    ).map((t) => [String(t._id), t.steps]),
-  );
-  const topGroups = groups
-    .map((g) => ({ name: g.name, members: g.members.length, steps: g.members.reduce((s, m) => s + (stepsBy.get(String(m)) ?? 0), 0) }))
-    .sort((a, b) => b.steps - a.steps)
-    .slice(0, 5);
+  // How many walkers sit in each league tier.
+  const tiers = await User.aggregate<{ _id: number; walkers: number }>([
+    { $match: { ...WALKER, hiddenFromLeagues: false } },
+    { $group: { _id: '$league', walkers: { $sum: 1 } } },
+  ]);
+  const leagues = rules.leagueTiers.map((name, i) => ({ tier: name, walkers: tiers.find((t) => t._id === i)?.walkers ?? 0 }));
 
   const hatchedTotal = bySpecies.reduce((s, r) => s + r.count, 0);
   res.json({
@@ -72,7 +67,7 @@ adminRouter.get('/overview', async (req, res) => {
       return { day, steps: row?.steps ?? 0, walkers: row?.walkers ?? 0 };
     }),
     hatchesBySpecies: bySpecies.map((r) => ({ species: r._id, count: r.count, share: hatchedTotal ? r.count / hatchedTotal : 0 })),
-    topGroups,
+    leagues,
   });
 });
 
@@ -81,8 +76,11 @@ adminRouter.get('/users', async (req, res) => {
   const filter = String(req.query.filter ?? 'all');
   const page = Math.max(Number(req.query.page ?? 1) || 1, 1);
   const limit = 25;
-  const match: Record<string, unknown> = {};
-  if (q) match.$or = [{ nickname: new RegExp(escapeRegex(q), 'i') }, { email: new RegExp(escapeRegex(q), 'i') }];
+  const match: Record<string, unknown> = { ...WALKER };
+  if (q) {
+    const re = new RegExp(escapeRegex(q.replace(/^@/, '')), 'i');
+    match.$or = [{ username: re }, { nickname: re }, { email: re }];
+  }
   if (filter === 'flagged') match.flagged = true;
   if (filter === 'hidden') match.hiddenFromLeagues = true;
 
@@ -91,7 +89,9 @@ adminRouter.get('/users', async (req, res) => {
     User.find(match)
       .sort(filter === 'flagged' ? { updatedAt: -1 } : { createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(limit),
+      .limit(limit)
+      .select('username nickname email role league lifetimeSteps currentStreak flagged flagReason hiddenFromLeagues')
+      .lean(),
   ]);
   const ids = users.map((u) => u._id);
   const today = dayKey(new Date(), config.timezone);
@@ -100,7 +100,7 @@ adminRouter.get('/users', async (req, res) => {
       { $match: { userId: { $in: ids }, day: { $gte: addDays(today, -6) } } },
       { $group: { _id: '$userId', steps: { $sum: '$cappedTotal' } } },
     ]),
-    Pet.find({ userId: { $in: ids }, isActive: true }).select('userId name species stage'),
+    Pet.find({ userId: { $in: ids }, isActive: true }).select('userId name species stage').lean(),
     Pet.aggregate<{ _id: Types.ObjectId; species: string[] }>([
       { $match: { userId: { $in: ids }, hatchedAt: { $ne: null } } },
       { $group: { _id: '$userId', species: { $addToSet: '$species' } } },
@@ -118,7 +118,8 @@ adminRouter.get('/users', async (req, res) => {
       const pet = petBy.get(String(u._id));
       return {
         id: String(u._id),
-        nickname: u.nickname,
+        username: u.username ?? u.nickname,
+        nickname: u.username ?? u.nickname,
         email: u.email,
         role: u.role,
         league: u.league,
@@ -164,7 +165,7 @@ adminRouter.get('/monsters', async (_req, res) => {
   const [entries, owners] = await Promise.all([
     catalog(),
     Pet.aggregate<{ _id: string; owners: number }>([
-      { $match: { hatchedAt: { $ne: null } } },
+      { $match: { hatchedAt: { $ne: null }, userId: { $nin: await adminIds() } } },
       { $group: { _id: '$species', users: { $addToSet: '$userId' } } },
       { $project: { owners: { $size: '$users' } } },
     ]),

@@ -1,76 +1,73 @@
 import * as SystemUI from 'expo-system-ui';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
-// "Quest Meadow": grass green actions on paper, with sky, sun, berry and grape accents.
-const light = {
-  bg: '#F6F8F3',
-  card: '#FFFFFF',
-  ink: '#1D2433',
-  muted: '#5B6474',
-  accent: '#138A47',
-  accentDeep: '#0B6634', // the 3D edge under primary buttons
-  accentSoft: '#E8F7EE',
-  accentText: '#0B6634',
-  onAccent: '#FFFFFF',
-  good: '#138A47',
-  gold: '#FFC233',
-  border: '#E3E9DD',
-  line: '#E3E9DD',
-  shadow: '#DCE3D5', // the flat ledge under cards
-  inputBorder: '#E3E9DD',
-  disabledFace: '#EDF1E8',
-  danger: '#B03A2E',
-  dangerSoft: '#FFE3E0',
-  dangerEdge: '#F5BDB6',
-  overlay: '#10151FEE',
-  tabBg: '#FFFFFF',
-  hillFar: '#E2F2DA',
-  hillNear: '#CFEBC4',
-  sky: '#FFE08A',
-  // Extra tones for the golden-step radar, walk rhythm, pills and quests.
-  surface: '#FFFFFF',
-  surfaceAlt: '#EDF1E8',
-  faint: '#8A93A3',
-  goldSoft: '#FFF4D6',
-  goldText: '#5C4300',
-  goodSoft: '#E8F7EE',
-  night: '#14203A',
-  skyBlue: '#3D9BF5',
-  skySoft: '#E3F0FE',
-  skyText: '#1A5FA3',
-  berry: '#FF5C8A',
-  berrySoft: '#FFE3EC',
-  berryText: '#A3244B',
-  grape: '#8B5CF6',
-  grapeDeep: '#6B3FD6',
-  grapeSoft: '#F3EAFF',
-  grapeText: '#4B2AA8',
-  flame: '#FF8A2B',
+// "Paper & Ink": warm paper, near-black ink, one terracotta accent. Colour belongs to the monsters.
+const day = {
+  desk: '#23201C', // the dark strip above daily screens
+  deskText: '#B8AE9E',
+  paper: '#EEE8DC',
+  paperRaised: '#F6F1E7',
+  paperShade: '#EAE3D6', // tab bar, sheets
+  ink: '#2A2622',
+  inkSoft: '#4A433B',
+  muted: '#6B6256',
+  faint: '#9A9082',
+  rule: '#DDD5C6',
+  ruleStrong: '#B9AF9F',
+  accent: '#A9472A', // terracotta
+  sage: '#5C6B4A', // goal met, move up
+  sageSoft: '#6F7D5C',
+  onInk: '#F3EDE2',
+  inkEdge: '#0F0D0B', // the ledge under ink buttons
+  scrim: 'rgba(35,32,28,0.45)',
 };
 
-export type Palette = typeof light;
+// Night lamp: the same layout on dimmed paper, lit by a warm beam.
+const night = {
+  ...day,
+  desk: '#141210',
+  deskText: '#8F8676',
+  paper: '#34302B',
+  paperRaised: '#3E3934',
+  paperShade: '#2E2A26',
+  ink: '#EFE6D6',
+  inkSoft: '#DCD2C1',
+  muted: '#A69C8B',
+  faint: '#8F8676',
+  rule: '#45403A',
+  ruleStrong: '#5E574E',
+  accent: '#E9A86B',
+  onInk: '#2A2622',
+  inkEdge: '#000000',
+};
 
-// Step Pet has one look: the light Quest Meadow palette, whatever the phone's own theme is.
-export const palettes = { light };
+export type Palette = typeof day;
+export const palettes = { day, night };
+
+export const fonts = {
+  display: 'Newsreader_500Medium',
+  displayItalic: 'Newsreader_500Medium_Italic',
+  body: 'CourierPrime_400Regular',
+  bodyBold: 'CourierPrime_700Bold',
+};
 
 type ThemeValue = { colors: Palette };
-const ThemeContext = createContext<ThemeValue | null>(null);
-const value: ThemeValue = { colors: light };
+const ThemeContext = createContext<ThemeValue>({ colors: day });
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Keeps the window behind the app (keyboard, screen transitions) the same colour as the app.
+export function ThemeProvider({ children, mode = 'day' }: { children: ReactNode; mode?: 'day' | 'night' }) {
+  // Keeps the window behind the app (keyboard, screen transitions) the same colour as the paper.
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(light.bg).catch(() => {});
+    SystemUI.setBackgroundColorAsync(day.paper).catch(() => {});
   }, []);
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ colors: palettes[mode] }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {
-  const v = useContext(ThemeContext);
-  if (!v) throw new Error('useTheme must be used inside ThemeProvider');
-  return v;
+  return useContext(ThemeContext);
 }
 
 export function useColors() {
-  return useTheme().colors;
+  return useContext(ThemeContext).colors;
 }
+
+export const fmt = (n: number) => Math.round(n).toLocaleString('en').replace(/,/g, ' ');

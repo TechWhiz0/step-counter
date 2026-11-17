@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addDays, weekStart } from '../src/lib/dates.js';
-import { cappedTotal, energyFor, formFor, goldenTargets, stageFor, stageProgress, traitsFor } from '../src/lib/petRules.js';
+import { cappedTotal, energyFor, formFor, stageFor, stageProgress, traitsFor } from '../src/lib/petRules.js';
 
 const hours = (map: Record<number, number>) => Array.from({ length: 24 }, (_, h) => map[h] ?? 0);
 
@@ -43,13 +43,6 @@ test('walking time shifts colour', () => {
   const morning = traitsFor({ seed: 7, hourlySums: hours({ 7: 5000 }), avgDailySteps: 5000, bestStreak: 0 });
   const evening = traitsFor({ seed: 7, hourlySums: hours({ 20: 5000 }), avgDailySteps: 5000, bestStreak: 0 });
   assert.notEqual(morning.hue, evening.hue);
-});
-
-test('golden targets are distinct and in range', () => {
-  const t = goldenTargets(123, 6000);
-  assert.equal(t.length, 3);
-  assert.equal(new Set(t).size, 3);
-  assert.ok(t.every((x) => x >= 1000 && x <= 7800));
 });
 
 test('date helpers', () => {

@@ -29,7 +29,7 @@ export function petReply(pet: Pet, taps: number) {
 }
 
 export function growthMessage(pet: Pet) {
-  if (pet.stage === 'baby' && pet.seenStage === 'egg') return { title: 'Your egg hatched!', body: `Say hello to ${pet.name}. Nobody else has a pet that looks like this one.` };
+  if (pet.stage === 'baby' && pet.seenStage === 'egg') return { title: 'Your egg hatched!', body: `Say hello to ${pet.name}.` };
   if (pet.stage === 'teen') return { title: `${pet.name} grew up a bit!`, body: 'Teen now. Keep walking to see what they become.' };
   if (pet.stage === 'adult' && pet.form) {
     const f = FORM_LABEL[pet.form];

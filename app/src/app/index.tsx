@@ -1,16 +1,13 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
-import { useColors } from '@/components/ui';
+import { View } from 'react-native';
 import { useSession } from '@/lib/session';
+import { palettes } from '@/lib/theme';
 
 export default function Index() {
-  const colors = useColors();
   const { status, user } = useSession();
   if (status === 'loading') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
+      <View style={{ flex: 1, backgroundColor: palettes.day.desk }} />
     );
   }
   if (status !== 'signedIn') return <Redirect href="/welcome" />;

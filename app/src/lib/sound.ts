@@ -16,12 +16,31 @@ const FILES = {
   reward: require('../../assets/sounds/reward.wav'),
   fanfare: require('../../assets/sounds/fanfare.wav'),
   oops: require('../../assets/sounds/oops.wav'),
+  key: require('../../assets/sounds/key.wav'),
+  key2: require('../../assets/sounds/key2.wav'),
+  bell: require('../../assets/sounds/bell.wav'),
+  ratchet: require('../../assets/sounds/ratchet.wav'),
+  page: require('../../assets/sounds/page.wav'),
 } as const;
 
 export type SoundName = keyof typeof FILES;
 
 // Quieter for the frequent ones so they stay a texture, louder for rewards.
-const VOLUME: Record<SoundName, number> = { tap: 0.45, tick: 0.35, press: 0.5, boop: 0.7, chime: 0.7, reward: 0.75, fanfare: 0.8, oops: 0.55 };
+const VOLUME: Record<SoundName, number> = {
+  tap: 0.45,
+  tick: 0.35,
+  press: 0.5,
+  boop: 0.7,
+  chime: 0.7,
+  reward: 0.75,
+  fanfare: 0.8,
+  oops: 0.55,
+  key: 0.5,
+  key2: 0.5,
+  bell: 0.6,
+  ratchet: 0.45,
+  page: 0.5,
+};
 
 const KEY = 'steppet.sounds';
 const players = new Map<SoundName, AudioPlayer>();
@@ -70,6 +89,13 @@ export function playSound(name: SoundName) {
   } catch {
     // No audio: stay silent.
   }
+}
+
+// Typewriter keys: alternates two strikes so fast typing doesn't sound like one repeated sample.
+let keyFlip = false;
+export function playKey() {
+  keyFlip = !keyFlip;
+  playSound(keyFlip ? 'key' : 'key2');
 }
 
 export function soundsEnabled() {

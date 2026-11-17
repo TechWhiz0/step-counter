@@ -1,170 +1,149 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AdminPage, FilterPill, ListCard, ListRow, PageTitle } from '@/components/admin/AdminChrome';
-import { Avatar, ReviewCard, tierLabel } from '@/components/admin/ReviewCard';
-import { Icon } from '@/components/icons';
-import { Card, compact, ErrorText, fonts, SmallButton, useColors } from '@/components/ui';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
+import { AdminFrame, useReviewCount } from '@/components/AdminFrame';
+import { Monster } from '@/components/Monster';
+import { Button, Choice, ErrorText, Icon, Loading, T, fmt, fonts, useColors } from '@/components/paper';
 import { api } from '@/lib/api';
+import { haptic } from '@/lib/feel';
 import type { AdminUser, AdminUsersResult } from '@/lib/types';
 
 type Filter = 'all' | 'flagged' | 'hidden';
+const TIERS = ['sprout', 'bloom', 'sunflower', 'starfruit'];
 
-export default function AdminUsersScreen() {
+function UserRow({ u, onUnhide }: { u: AdminUser; onUnhide: (u: AdminUser) => void }) {
   const c = useColors();
-  const params = useLocalSearchParams<{ filter?: string }>();
-  const [filter, setFilter] = useState<Filter>(params.filter === 'flagged' || params.filter === 'hidden' ? params.filter : 'all');
-  const [q, setQ] = useState('');
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState<AdminUsersResult | null>(null);
-  const [flaggedCount, setFlaggedCount] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  // Debounce typing into the search box.
-  useEffect(() => {
-    const t = setTimeout(() => setQuery(q.trim()), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const refreshCount = useCallback(() => {
-    api<AdminUsersResult>('/admin/users?filter=flagged')
-      .then((r) => setFlaggedCount(r.total))
-      .catch(() => {});
-  }, []);
-  useEffect(refreshCount, [refreshCount]);
-
-  useEffect(() => {
-    let live = true;
-    setError(null);
-    setData(null);
-    setPage(1);
-    api<AdminUsersResult>(`/admin/users?filter=${filter}&q=${encodeURIComponent(query)}&page=1`)
-      .then((r) => live && setData(r))
-      .catch((e: Error) => live && setError(e.message));
-    return () => {
-      live = false;
-    };
-  }, [filter, query]);
-
-  const loadMore = async () => {
-    if (!data || page >= data.pages || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const next = await api<AdminUsersResult>(`/admin/users?filter=${filter}&q=${encodeURIComponent(query)}&page=${page + 1}`);
-      setData({ ...next, users: [...data.users, ...next.users] });
-      setPage(page + 1);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const update = (u: AdminUser) => {
-    setData((d) => {
-      if (!d) return d;
-      const keep = filter === 'flagged' ? u.flagged : filter === 'hidden' ? u.hiddenFromLeagues : true;
-      return { ...d, total: keep ? d.total : d.total - 1, users: keep ? d.users.map((x) => (x.id === u.id ? u : x)) : d.users.filter((x) => x.id !== u.id) };
-    });
-    refreshCount();
-  };
-
-  const unhide = async (u: AdminUser) => {
-    try {
-      const r = await api<{ flagged: boolean; hiddenFromLeagues: boolean }>(`/admin/users/${u.id}/review`, { body: { action: 'unhide' } });
-      update({ ...u, ...r });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  const flagged = data?.users.filter((u) => u.flagged) ?? [];
-  const rest = data?.users.filter((u) => !u.flagged) ?? [];
-
+  const tag = u.flagged ? 'flagged' : u.hiddenFromLeagues ? 'hidden' : '';
   return (
-    <AdminPage active={filter === 'flagged' ? 'review' : 'users'} reviewCount={flaggedCount ?? undefined}>
-      <PageTitle back>{filter === 'flagged' ? 'Review' : 'Users'}</PageTitle>
-
-      <View style={[styles.search, { backgroundColor: c.card, borderColor: c.border }]}>
-        <Icon.search size={18} color={c.muted} />
-        <TextInput
-          value={q}
-          onChangeText={setQ}
-          placeholder="Nickname or email"
-          placeholderTextColor={c.muted}
-          selectionColor={c.accent}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          accessibilityLabel="Search users"
-          style={[styles.searchInput, { color: c.ink }]}
-        />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, borderBottomWidth: 1, borderBottomColor: c.rule }} accessible accessibilityLabel={`@${u.username}, ${u.email}, ${fmt(u.steps7d)} steps this week${tag ? `, ${tag}` : ''}`}>
+      {u.pet ? <Monster species={u.pet.species} stage={u.pet.stage} size={38} /> : <View style={{ width: 38 }} />}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T style={{ fontFamily: fonts.bodyBold }} numberOfLines={1}>
+          @{u.username}
+          {tag ? <T v="small" color={u.flagged ? c.accent : c.muted}>{`  ${tag}`}</T> : null}
+        </T>
+        <T v="small" numberOfLines={1}>
+          {u.email}
+        </T>
+        {u.hiddenFromLeagues && (
+          <Pressable accessibilityRole="button" onPress={() => onUnhide(u)} hitSlop={8} style={{ minHeight: 28, justifyContent: 'center' }}>
+            <T v="small" style={{ textDecorationLine: 'underline' }}>
+              Show in leagues again
+            </T>
+          </Pressable>
+        )}
       </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <FilterPill label="All" on={filter === 'all'} onPress={() => setFilter('all')} />
-        <FilterPill label={flaggedCount ? `Flagged · ${flaggedCount}` : 'Flagged'} on={filter === 'flagged'} onPress={() => setFilter('flagged')} />
-        <FilterPill label="Hidden" on={filter === 'hidden'} onPress={() => setFilter('hidden')} />
-      </ScrollView>
-
-      <ErrorText message={error} />
-      {!data ? (
-        !error && <ActivityIndicator color={c.accent} style={{ marginTop: 40 }} />
-      ) : data.users.length === 0 ? (
-        <Card style={{ alignItems: 'center', paddingVertical: 24, gap: 6 }}>
-          <Icon.check size={28} color={c.accent} />
-          <Text style={{ fontFamily: fonts.bodyHeavy, fontSize: 15, color: c.ink }}>
-            {filter === 'flagged' ? 'Nobody to review' : filter === 'hidden' ? 'No hidden walkers' : 'No walkers match'}
-          </Text>
-        </Card>
-      ) : (
-        <>
-          {flagged.map((u) => (
-            <ReviewCard key={u.id} user={u} onDone={update} />
-          ))}
-          {rest.length > 0 && (
-            <ListCard>
-              {rest.map((u, i) => (
-                <ListRow key={u.id} first={i === 0}>
-                  <Avatar species={u.pet?.species} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.name, { color: c.ink }]} numberOfLines={1}>
-                      {u.nickname}
-                      {u.role === 'admin' ? ' · admin' : ''}
-                    </Text>
-                    <Text style={[styles.sub, { color: c.muted }]} numberOfLines={1}>
-                      {u.monstersRaised} {u.monstersRaised === 1 ? 'monster' : 'monsters'} · {tierLabel(u.league)}
-                      {u.hiddenFromLeagues ? ' · hidden' : ''}
-                    </Text>
-                  </View>
-                  {u.hiddenFromLeagues ? (
-                    <SmallButton label="Unhide" tone="plain" onPress={() => unhide(u)} />
-                  ) : (
-                    <Text style={[styles.steps, { color: c.ink }]}>{compact(u.steps7d)}</Text>
-                  )}
-                </ListRow>
-              ))}
-            </ListCard>
-          )}
-          {page < data.pages && (
-            <View style={{ alignItems: 'center' }}>
-              {loadingMore ? <ActivityIndicator color={c.accent} /> : <SmallButton label={`Show more (${data.total - data.users.length})`} tone="plain" onPress={loadMore} />}
-            </View>
-          )}
-          <Text style={[styles.foot, { color: c.muted }]}>Steps shown are the last 7 days, capped per hour.</Text>
-        </>
-      )}
-    </AdminPage>
+      <View style={{ alignItems: 'flex-end' }}>
+        <T>{fmt(u.steps7d)}</T>
+        <T v="small">
+          {TIERS[u.league] ?? 'sprout'} · {u.currentStreak}d
+        </T>
+      </View>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  search: { height: 46, borderWidth: 2, borderRadius: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  searchInput: { flex: 1, fontFamily: fonts.bodySemi, fontSize: 15, paddingVertical: 0 },
-  name: { fontFamily: fonts.bodyHeavy, fontSize: 15 },
-  sub: { fontFamily: fonts.body, fontSize: 12 },
-  steps: { fontFamily: fonts.bodyHeavy, fontSize: 14 },
-  foot: { fontFamily: fonts.body, fontSize: 12, textAlign: 'center' },
-});
+export default function AdminUsers() {
+  const c = useColors();
+  const { reload: reloadCount } = useReviewCount();
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [data, setData] = useState<AdminUsersResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const seq = useRef(0);
+
+  const load = useCallback(async (f: Filter, q: string) => {
+    const mine = ++seq.current;
+    try {
+      const r = await api<AdminUsersResult>(`/admin/users?filter=${f}&q=${encodeURIComponent(q)}&page=1`);
+      if (mine === seq.current) {
+        setData(r);
+        setError(null);
+      }
+    } catch (e) {
+      if (mine === seq.current) setError((e as Error).message);
+    }
+  }, []);
+
+  // Search waits for a pause in typing.
+  useEffect(() => {
+    const t = setTimeout(() => void load(filter, query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filter, query, load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load(filter, query.trim());
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
+
+  async function loadMore() {
+    if (!data || data.page >= data.pages) return;
+    setMore(true);
+    try {
+      const next = await api<AdminUsersResult>(`/admin/users?filter=${filter}&q=${encodeURIComponent(query.trim())}&page=${data.page + 1}`);
+      setData({ ...next, users: [...data.users, ...next.users] });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setMore(false);
+    }
+  }
+
+  async function unhide(u: AdminUser) {
+    try {
+      const r = await api<{ hiddenFromLeagues: boolean }>(`/admin/users/${u.id}/review`, { body: { action: 'unhide' } });
+      haptic.success();
+      setData((d) => (d ? { ...d, users: d.users.map((x) => (x.id === u.id ? { ...x, hiddenFromLeagues: r.hiddenFromLeagues } : x)) } : d));
+      reloadCount();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <AdminFrame title="Walkers">
+      <View style={{ marginHorizontal: 28, marginTop: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1.5, borderBottomColor: c.ruleStrong, minHeight: 44 }}>
+          <Icon name="search" size={16} color={c.muted} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="username or email"
+            placeholderTextColor={c.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Search walkers"
+            style={{ flex: 1, fontFamily: fonts.body, fontSize: 14, color: c.ink, paddingVertical: 8 }}
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          {(['all', 'flagged', 'hidden'] as Filter[]).map((f) => (
+            <Choice key={f} on={filter === f} onPress={() => setFilter(f)} label={`Show ${f}`} style={{ paddingHorizontal: 14, justifyContent: 'center', borderRadius: 22 }}>
+              <T style={{ fontFamily: filter === f ? fonts.bodyBold : fonts.body }}>{f}</T>
+            </Choice>
+          ))}
+        </View>
+      </View>
+      <ErrorText message={error} style={{ marginHorizontal: 28, marginTop: 8 }} />
+      {!data ? (
+        <Loading />
+      ) : (
+        <View style={{ marginHorizontal: 28, marginTop: 10, borderTopWidth: 1, borderTopColor: c.ink }}>
+          {data.users.map((u) => (
+            <UserRow key={u.id} u={u} onUnhide={unhide} />
+          ))}
+          {data.users.length === 0 && <T style={{ paddingVertical: 18 }}>No walkers match.</T>}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+            <T v="small">7-day steps, capped</T>
+            <T v="small">
+              {fmt(data.total)} walker{data.total === 1 ? '' : 's'}
+            </T>
+          </View>
+          {data.page < data.pages && <Button kind="outline" label="Show more" onPress={loadMore} busy={more} style={{ marginTop: 12 }} />}
+        </View>
+      )}
+    </AdminFrame>
+  );
+}

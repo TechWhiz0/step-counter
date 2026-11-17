@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { me, requireAuth } from '../lib/auth.js';
 import { todayFor } from '../lib/game.js';
 import { leagueBoard } from '../lib/leagues.js';
+import { channels, LONG_POLL_MS, waitForChange, waitParam } from '../lib/live.js';
 import { claimQuest, questsFor } from '../lib/quests.js';
 import { catalog, isUnlocked, unlockProgress } from '../lib/species.js';
 import { Pet } from '../models/index.js';
@@ -24,8 +25,17 @@ questsRouter.post('/:id/claim', async (req, res) => {
 export const leaguesRouter = Router();
 leaguesRouter.use(requireAuth);
 
+// The board for the walker's tier. With ?wait=<rev> the request waits until anyone in the tier syncs
+// new steps (or ~25 s pass), so an open leaderboard updates by itself without hammering the server.
 leaguesRouter.get('/', async (req, res) => {
   const user = me(req);
+  const seen = waitParam(req.query.wait);
+  if (seen !== null) {
+    const abort = new AbortController();
+    res.on('close', () => abort.abort());
+    await waitForChange(channels.league(user.league), seen, LONG_POLL_MS, abort.signal);
+    if (abort.signal.aborted) return;
+  }
   res.json(await leagueBoard(user, todayFor(user)));
 });
 
@@ -36,8 +46,8 @@ monstersRouter.use(requireAuth);
 monstersRouter.get('/', async (req, res) => {
   const user = me(req);
   const progress = { lifetimeSteps: user.lifetimeSteps, bestStreak: user.bestStreak };
-  const raised = new Set(await Pet.distinct('species', { userId: user._id, hatchedAt: { $ne: null } }));
-  const entries = await catalog();
+  const [raised, entries] = await Promise.all([Pet.distinct('species', { userId: user._id, hatchedAt: { $ne: null } }), catalog()]);
+  const raisedSet = new Set(raised);
   res.json({
     lifetimeSteps: user.lifetimeSteps,
     bestStreak: user.bestStreak,
@@ -50,7 +60,7 @@ monstersRouter.get('/', async (req, res) => {
       enabled: e.enabled,
       unlocked: isUnlocked(e, progress),
       progress: unlockProgress(e, progress),
-      raised: raised.has(e.id),
+      raised: raisedSet.has(e.id),
     })),
   });
 });

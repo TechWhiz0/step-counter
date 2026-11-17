@@ -1,123 +1,209 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect, useIsFocused } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Animated, Pressable, RefreshControl, View } from 'react-native';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { dialog } from '@/components/Dialog';
-import { HERO, HeroDecor, PHASE_LABEL, type HeroColors } from '@/components/HeroTheme';
-import { GoldenRadar } from '@/components/GoldenRadar';
-import { petLevel } from '@/components/GrowthPath';
-import { Icon } from '@/components/icons';
-import { PetArt, PetView } from '@/components/PetView';
-import { QuestList } from '@/components/QuestList';
-import { ShareCard } from '@/components/ShareCard';
-import { Sky } from '@/components/Sky';
-import { Bar, Button, ErrorText, fonts, Muted, radius, Ring, T, TopBar, useColors } from '@/components/ui';
-import { WalkRhythm } from '@/components/WalkRhythm';
+import { Monster, speciesName } from '@/components/Monster';
+import { DeskScreen, Icon, Loading, Meta, Rail, Rhythm, Rule, Stamp, Struck, T, fmt, fonts, useColors } from '@/components/paper';
 import { api } from '@/lib/api';
-import { haptic } from '@/lib/feel';
-import { itemEmoji, itemLabel } from '@/lib/items';
+import { haptic, useReducedMotion } from '@/lib/feel';
+import { itemLabel } from '@/lib/items';
+import { useAppActive, useLive } from '@/lib/live';
 import { getHourlySums } from '@/lib/localDb';
-import { ENERGY_LABEL, energyLevel, lookNow, phaseReply, statusLine, useDayPhase } from '@/lib/petState';
-import { growthMessage, petReply } from '@/lib/petText';
+import { useLiveSteps } from '@/lib/pedometer';
+import { lookNow, statusLine, useDayPhase } from '@/lib/petState';
+import { petReply } from '@/lib/petText';
 import { useSession } from '@/lib/session';
-import { cachedSync, syncSteps, takePendingSurprises } from '@/lib/sync';
-import type { Palette } from '@/lib/theme';
-import type { Pet, Quest, QuestsResult, Surprise, SyncResult } from '@/lib/types';
+import { cachedSync, syncSteps } from '@/lib/sync';
+import { ThemeProvider } from '@/lib/theme';
+import type { Quest, QuestsResult, TodayState } from '@/lib/types';
 
-function EnergyMeter({ energy, hero }: { energy: number | undefined; hero: HeroColors }) {
+const SYNC_EVERY_MS = 45_000;
+const DAY = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MONTH = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const MOON_HOURS = [17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4];
+
+function dateLabel(d = new Date()) {
+  return `${DAY[d.getDay()]} · ${d.getDate()} ${MONTH[d.getMonth()]}`;
+}
+
+// The pet, bobbing gently, with a speech line when tapped.
+function PetStage({ state, night }: { state: TodayState; night: boolean }) {
   const c = useColors();
-  const level = energyLevel(energy);
-  const color = { full: c.accent, okay: c.gold, tired: c.flame, weak: c.berry }[level];
-  const value = energy ?? 70;
-  const warn = level === 'tired' || level === 'weak';
+  const phase = useDayPhase();
+  const reduced = useReducedMotion();
+  const [said, setSaid] = useState<string | null>(null);
+  const taps = useRef(0);
+  const bob = useRef(new Animated.Value(0)).current;
+  const squish = useRef(new Animated.Value(1)).current;
+  const pet = state.pet!;
+  const look = lookNow(pet, night ? 'night' : phase === 'night' ? 'evening' : phase);
+  useEffect(() => {
+    if (reduced || look.mood === 'asleep') return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 1400, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [bob, reduced, look.mood]);
+  useEffect(() => {
+    if (!said) return;
+    const t = setTimeout(() => setSaid(null), 3500);
+    return () => clearTimeout(t);
+  }, [said]);
+
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }} accessible accessibilityLabel={`Energy ${value} percent, ${ENERGY_LABEL[level]}`}>
-      <Icon.bolt size={14} color={color} />
-      <View style={{ flex: 1 }}>
-        <Bar value={value / 100} height={8} color={color} track={hero.track} />
-      </View>
-      <Text style={{ fontFamily: fonts.bodyHeavy, fontSize: 12, color: warn ? color : hero.text }}>{warn ? ENERGY_LABEL[level].replace('!', '') : `${value}%`}</Text>
+    <View style={{ alignItems: 'center' }}>
+      {said ? (
+        <View style={{ position: 'absolute', top: -6, zIndex: 2, backgroundColor: c.paperRaised, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: c.rule }}>
+          <T v="small" color={c.ink}>
+            {said}
+          </T>
+        </View>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${pet.name}, ${pet.stage === 'egg' ? 'an egg' : speciesName(pet.species)}. Tap to say hello.`}
+        onPress={() => {
+          haptic.pet();
+          taps.current += 1;
+          setSaid(petReply(pet, taps.current));
+          squish.setValue(0.9);
+          Animated.spring(squish, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 14 }).start();
+        }}
+      >
+        <Animated.View
+          style={{
+            transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }, { scaleY: squish }, { scaleX: Animated.divide(1, squish) as unknown as number }],
+          }}
+        >
+          <Monster species={pet.species} stage={pet.stage} mood={look.mood} form={pet.form} equipped={pet.equipped} size={168} />
+        </Animated.View>
+      </Pressable>
+      {night && look.mood === 'asleep' ? (
+        <View style={{ position: 'absolute', right: 96, top: 8 }} accessibilityElementsHidden>
+          <T color={c.ink}>z</T>
+          <T v="small" color={c.muted} style={{ marginLeft: 10, marginTop: -16 }}>
+            z
+          </T>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-// Mon..Sun dots for this week: past streak days filled, today ringed (filled once the goal is met).
-function weekDots(streak: number, goalMet: boolean) {
-  const dow = (new Date().getDay() + 6) % 7; // Monday = 0
-  const pastStreak = goalMet ? streak - 1 : streak;
-  return Array.from({ length: 7 }, (_, i) => {
-    if (i > dow) return 'future' as const;
-    if (i === dow) return goalMet ? ('done' as const) : ('today' as const);
-    return dow - i <= pastStreak ? ('done' as const) : ('missed' as const);
-  });
+function QuestLine({ q, onClaim, busy }: { q: Quest; onClaim: (id: Quest['id']) => void; busy: boolean }) {
+  const c = useColors();
+  const ready = q.done && !q.claimed;
+  return (
+    <Pressable
+      accessibilityRole={ready ? 'button' : 'text'}
+      accessibilityLabel={`${q.title}. ${q.claimed ? 'Done' : ready ? 'Finished, tap to claim' : `${fmt(q.progress)} of ${fmt(q.target)}`}`}
+      disabled={!ready || busy}
+      onPress={() => onClaim(q.id)}
+      style={{ flexDirection: 'row', justifyContent: 'space-between', minHeight: 30, alignItems: 'center' }}
+    >
+      {q.claimed ? <Struck>{q.title}</Struck> : <T>{q.title}</T>}
+      <T color={ready ? c.accent : c.muted} style={ready ? { fontFamily: fonts.bodyBold } : undefined}>
+        {q.claimed ? 'done' : ready ? (busy ? '…' : 'claim') : `${fmt(q.progress)} / ${fmt(q.target)}`}
+      </T>
+    </Pressable>
+  );
 }
 
-export default function Home() {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
-  const focused = useIsFocused();
+function TodayBody({ initial }: { initial: TodayState | null }) {
+  const c = useColors();
   const { user } = useSession();
-  const [data, setData] = useState<SyncResult | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [surprises, setSurprises] = useState<Surprise[]>([]);
-  const [sharing, setSharing] = useState(false);
-  const [weekSteps, setWeekSteps] = useState(0);
-  const [weekSums, setWeekSums] = useState<number[]>(Array(24).fill(0));
-  const [bubble, setBubble] = useState<string | null>(null);
-  const [quests, setQuests] = useState<Quest[] | null>(null);
-  const [treats, setTreats] = useState<number | null>(null);
-  const [claiming, setClaiming] = useState<string | null>(null);
-  const pets = useRef(0);
   const phase = useDayPhase();
-  const hero = HERO[phase];
+  const night = phase === 'night';
+  const active = useAppActive();
+  const liveSteps = useLiveSteps();
+  const [state, setState] = useState<TodayState | null>(initial);
+  const [syncing, setSyncing] = useState(false);
+  const [quests, setQuests] = useState<Quest[] | null>(null);
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [eveningShare, setEveningShare] = useState<number | null>(null);
+  const liveAtSync = useRef(0);
+  const liveRef = useRef(liveSteps);
+  liveRef.current = liveSteps;
+  const shown = useRef(new Set<string>());
+
+  // Other devices: the server pushes their syncs to this screen as they happen.
+  const live = useLive<TodayState>('/steps/state', { initial });
+  useEffect(() => {
+    if (live.data && (!state || (live.data.rev ?? 0) >= (state.rev ?? 0))) setState(live.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.data]);
 
   const loadQuests = useCallback(async () => {
-    try {
-      const r = await api<QuestsResult>('/quests');
-      setQuests(r.quests);
-      setTreats(r.treats);
-    } catch {
-      // Quests are a bonus; the rest of home still works offline.
-    }
+    const r = await api<QuestsResult>('/quests').catch(() => null);
+    if (r) setQuests(r.quests);
   }, []);
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const result = await syncSteps();
-      if (result) {
-        setData(result);
-        setError(null);
-        if (!result.pet) return router.replace('/onboarding');
+  const sync = useCallback(
+    async (manual?: boolean) => {
+      if (manual) setSyncing(true);
+      const before = liveRef.current;
+      try {
+        const result = await syncSteps();
+        if (result) {
+          liveAtSync.current = before;
+          setState(result);
+          if (!result.pet) return router.replace('/onboarding');
+        }
+        void loadQuests();
+        const sums = await getHourlySums(14);
+        const total = sums.reduce((a, b) => a + b, 0);
+        setEveningShare(total ? MOON_HOURS.reduce((s, h) => s + sums[h], 0) / total : null);
+      } catch (e) {
+        if (manual) dialog("Couldn't sync", (e as Error).message);
+      } finally {
+        setSyncing(false);
       }
-      void loadQuests();
-      setSurprises(await takePendingSurprises());
-      setWeekSums(await getHourlySums(7));
-      const { days } = await api<{ days: { total: number }[] }>('/steps/history?days=7');
-      setWeekSteps(days.reduce((s, d) => s + d.total, 0));
-    } catch (e) {
-      setError(`Couldn't sync: ${(e as Error).message}. Showing your last saved data.`);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadQuests]);
-
-  useEffect(() => {
-    cachedSync().then((c) => c && setData((d) => d ?? c));
-    getHourlySums(7).then(setWeekSums).catch(() => {});
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && void refresh());
-    return () => sub.remove();
-  }, [refresh]);
+    },
+    [loadQuests],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      void sync();
+    }, [sync]),
   );
+  // While open, keep the server (and the league) up to date as you walk.
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => void sync(), SYNC_EVERY_MS);
+    return () => clearInterval(t);
+  }, [active, sync]);
+
+  // Growing up happens quietly on the page (no reveal screen): just tell the server it's been seen.
+  // New closet items still get a short note, once each.
+  useEffect(() => {
+    const pet = state?.pet;
+    if (!pet) return;
+    if (pet.stage !== pet.seenStage && !shown.current.has(`grow:${pet.id}:${pet.stage}`)) {
+      shown.current.add(`grow:${pet.id}:${pet.stage}`);
+      void api('/pet/seen', { method: 'POST' }).catch(() => {});
+    }
+    for (const item of state?.unlockedItems ?? []) {
+      if (shown.current.has(`item:${item}`)) continue;
+      shown.current.add(`item:${item}`);
+      haptic.reward();
+      dialog('New in the closet', `You walked far enough for the ${itemLabel(item).toLowerCase()}. Put it on in the closet.`);
+    }
+  }, [state]);
+
+  // The typewriter bell, once, when today's goal is reached while you watch.
+  const metBefore = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    const met = Math.max(state.today.total, state.today.total + liveSteps - liveAtSync.current) >= state.today.goal;
+    if (metBefore.current === false && met) haptic.bell();
+    metBefore.current = met;
+  }, [state, liveSteps]);
 
   const claim = useCallback(async (id: Quest['id']) => {
     setClaiming(id);
@@ -125,7 +211,6 @@ export default function Home() {
       const r = await api<QuestsResult>(`/quests/${id}/claim`, { method: 'POST' });
       haptic.reward();
       setQuests(r.quests);
-      setTreats(r.treats);
     } catch (e) {
       dialog("Couldn't claim", (e as Error).message);
     } finally {
@@ -133,225 +218,156 @@ export default function Home() {
     }
   }, []);
 
-  const pet = data?.pet;
-  if (!data || !pet) {
+  const total = state ? Math.max(state.today.total, state.today.total + liveSteps - liveAtSync.current) : 0;
+  const goal = state?.today.goal ?? user?.dailyGoal ?? 6000;
+  const left = Math.max(0, goal - total);
+  const nowHour = new Date().getHours();
+  const hourly = useMemo(() => state?.today.hourly ?? Array(24).fill(0), [state]);
+  const pet = state?.pet;
+
+  const header = {
+    left: (
+      <Pressable accessibilityRole="button" accessibilityLabel="Me and settings" onPress={() => router.push('/me')} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
+        <Icon name="me" size={16} color={c.deskText} />
+        <Meta color={c.deskText}>{dateLabel()}</Meta>
+      </Pressable>
+    ),
+    right: `${fmt(total)} / ${fmt(goal)}`,
+  };
+
+  if (!state || !pet) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, padding: 24 }}>
-        <Muted>{error ?? 'Waking up your pet…'}</Muted>
-      </View>
+      <DeskScreen {...header} night={night}>
+        {live.error && !state ? (
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <T v="small">{live.error}</T>
+          </View>
+        ) : (
+          <Loading kind="today" />
+        )}
+      </DeskScreen>
     );
   }
 
-  const grew = pet.stage !== pet.seenStage;
-  const { total, goal } = data.today;
-  const left = Math.max(0, goal - total);
-  const pct = goal ? total / goal : 0;
-  const lifetime = data.lifetimeSteps ?? user?.lifetimeSteps ?? 0;
-  const treatCount = treats ?? data.treats ?? user?.treats ?? 0;
-  const claimable = quests?.filter((q) => q.done && !q.claimed).length ?? 0;
-  const dots = weekDots(data.streak.current, left === 0);
-  const mood = bubble ?? statusLine(pet, phase, left);
-  const look = lookNow(pet, phase);
+  const line =
+    pet.stage === 'egg'
+      ? `${pet.name} is wiggling inside the egg.\n\n${fmt(pet.stepsToNextStage)} more steps\nand it hatches.`
+      : left === 0
+        ? `${pet.name} ${night ? 'fell asleep happy' : 'is bouncing with joy'}.\n\nGoal met. ${state.streak.current > 0 ? `That makes\n${state.streak.current + 1} days in a row.` : 'Lovely walking.'}`
+        : `${statusLine(pet, phase, left)}\n\n${fmt(left)} steps to go.\n${night ? 'Tomorrow is a new page.' : 'A short walk would do it.'}`;
 
+  const quest = quests ?? [];
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.bg }}
-      contentContainerStyle={[styles.body, { paddingTop: insets.top + 12 }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} progressViewOffset={insets.top} />}
-    >
-      {focused && <StatusBar style="dark" />}
-      <TopBar
-        streak={data.streak.current}
-        lifetime={lifetime}
-        treats={treatCount}
-        right={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={claimable ? `Notifications, ${claimable} new` : 'Notifications'}
-            onPress={() => {
-              haptic.tap();
-              dialog(
-                claimable ? `${claimable} reward${claimable === 1 ? '' : 's'} to claim` : 'All caught up',
-                claimable ? 'Finished quests are waiting in Daily quests.' : `${pet.name} will nudge you when something happens.`,
-                [{ text: claimable ? 'Nice!' : 'OK' }],
-                { art: <PetArt look={look} size={96} /> },
-              );
-            }}
-            style={[styles.bell, { backgroundColor: colors.card, borderColor: colors.border }]}
-          >
-            <Icon.bell size={20} color={colors.ink} />
-            {claimable > 0 && <View style={[styles.bellDot, { backgroundColor: colors.berry, borderColor: colors.card }]} />}
-          </Pressable>
-        }
-      />
-
-      <View style={[styles.hero, { backgroundColor: hero.bg, borderBottomColor: hero.ledge }]}>
-        <HeroDecor phase={phase} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={[styles.stagePill, { backgroundColor: hero.pill }]}>
-            <Text style={[styles.stagePillText, { color: hero.pillText }]} numberOfLines={1}>
-              Lv {petLevel(pet)} · {PHASE_LABEL[phase]}
-            </Text>
-          </View>
-          <Text style={[styles.petName, { color: hero.name }]} numberOfLines={1}>
-            {pet.name}
-          </Text>
-          <Text style={[styles.mood, { color: hero.text }]}>{mood}</Text>
-          {pet.stage !== 'egg' && <EnergyMeter energy={pet.energy} hero={hero} />}
-        </View>
-        <PetView
-          look={look}
-          size={140}
-          onPet={() => {
-            pets.current += 1;
-            setBubble(phaseReply(pet, phase, pets.current) ?? petReply(pet, pets.current));
+    <DeskScreen
+      {...header}
+      night={night}
+      refreshControl={
+        <RefreshControl
+          refreshing={syncing}
+          onRefresh={() => {
+            haptic.page();
+            void sync(true);
           }}
+          tintColor={c.ink}
+          colors={[c.ink]}
         />
+      }
+    >
+      <View style={{ paddingHorizontal: 28, paddingTop: 28, flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
+        <T style={{ flex: 1, color: night ? c.ink : c.ink }}>{line}</T>
+        <Stamp value={state.streak.current} label="DAY RUN" />
       </View>
 
-      <View style={styles.duo}>
-        <View style={[styles.tile, { flex: 1.15, backgroundColor: colors.card, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
-          <Ring value={pct} size={78} stroke={18}>
-            <Text style={[styles.ringPct, { color: colors.ink }]}>{Math.min(999, Math.round(pct * 100))}%</Text>
-          </Ring>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={[styles.bigNum, { color: colors.ink }]}>{total.toLocaleString('en')}</Text>
-            <Text style={[styles.tileNote, { color: colors.muted }]}>of {goal.toLocaleString('en')} steps</Text>
+      <View style={{ marginTop: 4 }}>
+        {night && <NightBeam />}
+        <PetStage state={state} night={night} />
+      </View>
+
+      <View style={{ marginTop: 6 }}>
+        <Rail steps={total} goal={goal} night={night} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 28 }}>
+          <Meta>0</Meta>
+          <Meta color={left ? c.muted : c.sage}>{left ? `${fmt(left)} to go` : `goal met · +${fmt(total - goal)}`}</Meta>
+          <Meta>goal {fmt(goal)}</Meta>
+        </View>
+      </View>
+
+      <View style={{ paddingHorizontal: 28, paddingTop: 22 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Meta>Today's rhythm</Meta>
+          <T v="small">{liveSteps > 0 ? 'counting live' : 'from your phone'}</T>
+        </View>
+        <Rhythm hourly={hourly} nowHour={nowHour} />
+      </View>
+
+      {night && pet.stage !== 'egg' && pet.stage !== 'adult' && eveningShare !== null && (
+        <View style={{ marginHorizontal: 28, marginTop: 24, gap: 10 }}>
+          <Rule dashed />
+          <Meta>What {pet.name} is becoming</Meta>
+          <T>
+            {eveningShare >= 0.45
+              ? 'Your evening walks are winning. Keep it up and the moonlight form settles in.'
+              : `Evenings hold ${Math.round(eveningShare * 100)}% of your walks. Past 45% and ${pet.name} grows into the moonlight form.`}
+          </T>
+          <View style={{ height: 4, backgroundColor: c.rule, borderRadius: 2 }}>
+            <View style={{ width: `${Math.round(eveningShare * 100)}%`, height: 4, backgroundColor: c.ink, borderRadius: 2 }} />
+            <View style={{ position: 'absolute', left: '45%', top: -5, width: 1, height: 14, backgroundColor: c.accent }} />
           </View>
         </View>
-        <View style={[styles.tile, { flex: 1, backgroundColor: colors.goldSoft, borderColor: '#FFE3A0', gap: 4 }]}>
-          <Text style={[styles.tileLabel, { color: '#7A5600' }]}>Streak</Text>
-          <Text style={[styles.streakNum, { color: colors.goldText }]}>
-            {data.streak.current} day{data.streak.current === 1 ? '' : 's'}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 3 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {dots.map((d, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  d === 'done' && { backgroundColor: colors.flame },
-                  d === 'today' && { borderWidth: 2.5, borderColor: colors.flame },
-                  (d === 'future' || d === 'missed') && { backgroundColor: '#F2E3B8' },
-                ]}
-              />
+      )}
+
+      {quest.length > 0 && (
+        <View style={{ marginHorizontal: 28, marginTop: 22, gap: 8 }}>
+          <Rule dashed />
+          <View style={{ gap: 4, paddingTop: 6 }}>
+            {quest.map((q) => (
+              <QuestLine key={q.id} q={q} onClaim={claim} busy={claiming === q.id} />
             ))}
           </View>
         </View>
-      </View>
+      )}
 
-      <QuestList quests={quests} onClaim={claim} busy={claiming} />
-
-      <ErrorText message={error} />
-
-      <WalkRhythm hourly={data.today.hourly} weekSums={weekSums} form={pet.stage === 'adult' ? pet.form : null} petName={pet.name} />
-      <GoldenRadar golden={data.golden} petName={pet.name} />
-
-      <Button
-        label={`Share ${pet.name}`}
-        kind="dark"
-        icon={<Ionicons name="share-social" size={18} color={colors.bg} />}
-        onPress={() => setSharing(true)}
-      />
-
-      <ShareCard pet={pet} weekSteps={weekSteps} streak={data.streak.current} visible={sharing} onClose={() => setSharing(false)} />
-      <SurpriseModal petName={pet.name} surprises={grew ? [] : surprises} onDone={() => setSurprises([])} />
-      <GrowModal
-        pet={pet}
-        visible={grew}
-        onDone={async () => {
-          const { pet: seen } = await api<{ pet: Pet }>('/pet/seen', { method: 'POST' });
-          setData((d) => (d ? { ...d, pet: seen } : d));
-        }}
-      />
-    </ScrollView>
+      {pet.stage === 'adult' && (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/new-egg')} style={{ marginHorizontal: 28, marginTop: 18, minHeight: 44, justifyContent: 'center' }}>
+          <T v="small" style={{ textDecorationLine: 'underline' }}>
+            {pet.name} is grown up. Meet a new monster
+          </T>
+        </Pressable>
+      )}
+    </DeskScreen>
   );
 }
 
-function SurpriseModal({ petName, surprises, onDone }: { petName: string; surprises: Surprise[]; onDone: () => void }) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  useEffect(() => {
-    if (surprises.length) haptic.reward();
-  }, [surprises.length]);
+// A soft pool of lamplight over the sleeping pet.
+function NightBeam() {
   return (
-    <Modal visible={surprises.length > 0} transparent animationType="slide" onRequestClose={onDone}>
-      <View style={styles.sheetBackdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.grabber} />
-          <T v="hero" style={{ textAlign: 'center' }}>✨</T>
-          <T v="title" style={{ textAlign: 'center' }}>{petName} found something!</T>
-          <View style={styles.loot}>
-            {surprises.map((s) => (
-              <View key={s.step} style={styles.lootItem}>
-                <T v="hero">{itemEmoji(s.item)}</T>
-                <T v="h3">{itemLabel(s.item)}</T>
-                <T v="small" style={{ fontSize: 12 }}>step {s.step.toLocaleString()}</T>
-              </View>
-            ))}
-          </View>
-          <Muted style={{ textAlign: 'center' }}>Put it on your pet from the Closet tab.</Muted>
-          <Button label="Yay!" onPress={onDone} />
-        </View>
-      </View>
-    </Modal>
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: -70, height: 300 }}>
+      <Svg width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id="lamp" cx="50%" cy="62%" rx="42%" ry="58%">
+            <Stop offset="0" stopColor="#FFE2B4" stopOpacity={0.3} />
+            <Stop offset="0.55" stopColor="#FFE2B4" stopOpacity={0.1} />
+            <Stop offset="1" stopColor="#FFE2B4" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="400" height="300" fill="url(#lamp)" />
+      </Svg>
+    </View>
   );
 }
 
-function GrowModal({ pet, visible, onDone }: { pet: Pet; visible: boolean; onDone: () => void }) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const scale = useRef(new Animated.Value(0.2)).current;
-  const spin = useRef(new Animated.Value(0)).current;
+export default function Today() {
+  const phase = useDayPhase();
+  const [initial, setInitial] = useState<TodayState | null | undefined>(undefined);
   useEffect(() => {
-    if (!visible) return;
-    haptic.celebrate();
-    scale.setValue(0.2);
-    spin.setValue(0);
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, friction: 4, tension: 60, useNativeDriver: true }),
-      Animated.timing(spin, { toValue: 1, duration: 900, useNativeDriver: true }),
-    ]).start();
-  }, [visible, scale, spin]);
-  const msg = growthMessage(pet);
+    cachedSync()
+      .then((s) => setInitial(s ?? null))
+      .catch(() => setInitial(null));
+  }, []);
+  if (initial === undefined) return null;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDone}>
-      <Sky band="moonlight" style={styles.grow}>
-        <Animated.View style={{ transform: [{ scale }, { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['-12deg', '0deg'] }) }] }}>
-          <PetArt look={pet} size={260} />
-        </Animated.View>
-        <T v="hero" style={{ color: '#fff', textAlign: 'center' }}>{msg.title}</T>
-        <T v="body" style={{ color: '#D7E2F2', textAlign: 'center' }}>{msg.body}</T>
-        <View style={{ alignSelf: 'stretch' }}>
-          <Button label="Amazing!" onPress={onDone} />
-        </View>
-      </Sky>
-    </Modal>
+    <ThemeProvider mode={phase === 'night' ? 'night' : 'day'}>
+      <TodayBody initial={initial} />
+    </ThemeProvider>
   );
 }
-
-const makeStyles = (colors: Palette) =>
-  StyleSheet.create({
-    body: { paddingHorizontal: 18, paddingBottom: 28, gap: 12 },
-    bell: { width: 40, height: 40, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-    bellDot: { position: 'absolute', top: 6, right: 7, width: 11, height: 11, borderRadius: 6, borderWidth: 2 },
-    hero: { borderRadius: 28, borderBottomWidth: 6, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
-    stagePill: { alignSelf: 'flex-start', height: 26, paddingHorizontal: 10, borderRadius: 999, justifyContent: 'center' },
-    stagePillText: { fontFamily: fonts.bodyHeavy, fontSize: 12 },
-    petName: { fontFamily: fonts.display, fontSize: 34, lineHeight: 38, includeFontPadding: false },
-    mood: { fontFamily: fonts.bodyBold, fontSize: 14, lineHeight: 19 },
-    duo: { flexDirection: 'row', gap: 10 },
-    tile: { borderWidth: 2, borderBottomWidth: 5, borderRadius: 22, padding: 12 },
-    ringPct: { fontFamily: fonts.bodyHeavy, fontSize: 15 },
-    bigNum: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, includeFontPadding: false },
-    tileNote: { fontFamily: fonts.body, fontSize: 12 },
-    tileLabel: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
-    streakNum: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, includeFontPadding: false },
-    dot: { width: 14, height: 14, borderRadius: 7 },
-    sheetBackdrop: { flex: 1, backgroundColor: 'rgba(20,16,12,0.45)', justifyContent: 'flex-end' },
-    sheet: { backgroundColor: colors.surface, padding: 24, paddingTop: 12, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, gap: 14 },
-    grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: colors.line, marginBottom: 6 },
-    loot: { flexDirection: 'row', justifyContent: 'center', gap: 12, flexWrap: 'wrap' },
-    lootItem: { alignItems: 'center', backgroundColor: colors.goldSoft, borderRadius: radius.lg, paddingVertical: 14, paddingHorizontal: 18, gap: 2 },
-    grow: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  });

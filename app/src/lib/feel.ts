@@ -1,13 +1,18 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
-import { playSound } from './sound';
+import { playKey, playSound } from './sound';
 
 // Each micro-interaction gets a haptic and a matching little sound.
 // Haptics never block or throw: a phone without a motor just stays quiet.
 export const haptic = {
   tap: () => {
     playSound('tap');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  },
+  // Ink buttons: a firm mechanical press.
+  press: () => {
+    playSound('press');
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   },
   select: () => {
@@ -21,6 +26,23 @@ export const haptic = {
   warn: () => {
     playSound('oops');
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  },
+  // Turning to another page (tabs, screens) or pulling to refresh.
+  page: () => {
+    playSound('page');
+    void Haptics.selectionAsync().catch(() => {});
+  },
+  // Typing in a field: a typewriter key, no vibration.
+  key: () => playKey(),
+  // The step capsule moving along its rail.
+  ratchet: () => {
+    playSound('ratchet');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft).catch(() => {});
+  },
+  // Reaching today's goal: the typewriter bell.
+  bell: () => {
+    playSound('bell');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   },
   // Petting the pet: a soft bump and a happy squeak.
   pet: () => {
